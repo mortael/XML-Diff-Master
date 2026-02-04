@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Upload, X, AlertTriangle, Copy, Check } from 'lucide-react';
+import { Upload, X, AlertTriangle, Copy, Check, AlignLeft } from 'lucide-react';
 import { XmlError } from '../types';
 
 interface XmlEditorProps {
@@ -9,6 +9,7 @@ interface XmlEditorProps {
   error?: XmlError | null;
   onUpload?: (file: File) => void;
   onClear?: () => void;
+  onFormat?: () => void;
 }
 
 export const XmlEditor: React.FC<XmlEditorProps> = ({ 
@@ -17,7 +18,8 @@ export const XmlEditor: React.FC<XmlEditorProps> = ({
   label, 
   error, 
   onUpload,
-  onClear
+  onClear,
+  onFormat
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
@@ -68,6 +70,16 @@ export const XmlEditor: React.FC<XmlEditorProps> = ({
           >
             <Upload size={16} />
           </button>
+
+          {value && onFormat && (
+            <button 
+              onClick={onFormat}
+              className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded transition-colors"
+              title="Format XML"
+            >
+              <AlignLeft size={16} />
+            </button>
+          )}
           
           <button 
             onClick={handleCopy}

@@ -16,7 +16,7 @@
       4. https://cdn.tailwindcss.com -> lib/tailwindcss.js
       5. https://unpkg.com/diff@5.1.0/dist/diff.min.js -> lib/diff.js
       6. https://unpkg.com/fast-xml-parser@4.3.2/src/fxp.min.js -> lib/fxp.js
-      7. https://unpkg.com/lucide-react@0.469.0/dist/umd/lucide-react.js -> lib/lucide-react.js
+      7. https://unpkg.com/lucide-react@0.294.0/dist/umd/lucide-react.min.js -> lib/lucide-react.js
       8. https://unpkg.com/clsx@2.0.0/dist/clsx.min.js -> lib/clsx.js
       9. https://unpkg.com/tailwind-merge@2.2.0/dist/bundle.min.js -> lib/tailwind-merge.js
       
@@ -30,8 +30,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/diff@5.1.0/dist/diff.min.js"></script>
     <script src="https://unpkg.com/fast-xml-parser@4.3.2/src/fxp.min.js"></script>
-    <!-- Note: lucide-react UMD does not have a .min.js version on unpkg for recent releases -->
-    <script src="https://unpkg.com/lucide-react@0.469.0/dist/umd/lucide-react.js"></script>
+    <!-- Using 0.294.0 which has a stable UMD build with global 'lucideReact' -->
+    <script src="https://unpkg.com/lucide-react@0.294.0/dist/umd/lucide-react.min.js"></script>
     <script src="https://unpkg.com/clsx@2.0.0/dist/clsx.min.js"></script>
     <script src="https://unpkg.com/tailwind-merge@2.2.0/dist/bundle.min.js"></script>
 
@@ -80,14 +80,14 @@
 <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.2.4",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",
-    "fast-xml-parser": "https://esm.sh/fast-xml-parser@^5.3.4",
-    "diff": "https://esm.sh/diff@^8.0.3",
-    "clsx": "https://esm.sh/clsx@^2.1.1",
+    "react": "https://esm.sh/react@^19.2.4",
     "tailwind-merge": "https://esm.sh/tailwind-merge@^3.4.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
+    "clsx": "https://esm.sh/clsx@^2.1.1",
+    "diff": "https://esm.sh/diff@^8.0.3",
+    "fast-xml-parser": "https://esm.sh/fast-xml-parser@^5.3.4"
   }
 }
 </script>
@@ -101,10 +101,16 @@
         const { createRoot } = ReactDOM;
         
         // Lucide Icons
-        // Ensure lucideReact is available
-        if (typeof window.lucideReact === 'undefined') {
+        // Fallback check for different global names
+        const lucideLib = window.lucideReact || window.lucide;
+        
+        if (!lucideLib) {
             console.error("Lucide React library not loaded!");
-            document.body.innerHTML = '<div style="color:red; padding:20px;">Error: Library failed to load. Please check internet connection or file paths.</div>';
+            document.body.innerHTML = '<div style="color:#f87171; padding:20px; font-family:sans-serif;">' + 
+                '<h2 style="margin-bottom:10px;">Error: Libraries failed to load</h2>' + 
+                '<p>Please check your internet connection.</p>' + 
+                '<p style="font-size:0.9em; opacity:0.8; margin-top:10px;">Missing: lucide-react (global: window.lucideReact)</p>' + 
+                '</div>';
             throw new Error("Lucide React not found");
         }
 
@@ -112,7 +118,7 @@
             Upload, X, AlertTriangle, Copy, Check, AlertCircle, Columns, 
             LayoutList, ListOrdered, Hash, AlignLeft, ArrowLeftRight, 
             FileCode, SortAsc, MessageSquareOff 
-        } = window.lucideReact;
+        } = lucideLib;
         
         const { clsx } = window;
         const { twMerge } = window.tailwindMerge;

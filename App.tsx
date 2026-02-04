@@ -140,6 +140,7 @@ const App: React.FC = () => {
                     error={leftError}
                     onUpload={(f) => handleUpload('left', f)}
                     onClear={() => setLeftContent('')}
+                    onFormat={() => setLeftContent(formatXML(leftContent))}
                 />
                 <XmlEditor 
                     label="Modified / Right" 
@@ -148,6 +149,7 @@ const App: React.FC = () => {
                     error={rightError}
                     onUpload={(f) => handleUpload('right', f)}
                     onClear={() => setRightContent('')}
+                    onFormat={() => setRightContent(formatXML(rightContent))}
                 />
              </div>
         )}
