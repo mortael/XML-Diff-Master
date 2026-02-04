@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { DiffMode, ComparisonResult, DiffLine, ViewType, UnifiedLine } from '../types';
 import { getIntraLineDiff } from '../services/diffService';
 import { AlertCircle, Columns, LayoutList, ListOrdered, Hash } from 'lucide-react';
@@ -64,7 +64,7 @@ export const DiffView: React.FC<DiffViewProps> = ({ comparison, loading }) => {
   }
 
   // Use configured colors from index.html (referenced via tailwind classes or custom defined here)
-  const getBgColor = (type: string, mode: DiffMode) => {
+  const getBgColor = (type: string) => {
       if (type === 'removed') {
           return 'bg-diff-del text-diff-delText';
       }
@@ -77,8 +77,8 @@ export const DiffView: React.FC<DiffViewProps> = ({ comparison, loading }) => {
   const renderSplitView = () => (
     comparison.leftLines.map((leftLine, index) => {
       const rightLine = comparison.rightLines[index];
-      const leftBg = getBgColor(leftLine.type, comparison.diffMode);
-      const rightBg = getBgColor(rightLine.type, comparison.diffMode);
+      const leftBg = getBgColor(leftLine.type);
+      const rightBg = getBgColor(rightLine.type);
       
       return (
         <div key={index} className="flex border-b border-slate-800 hover:bg-slate-800/50 font-mono text-xs sm:text-sm">
@@ -106,7 +106,7 @@ export const DiffView: React.FC<DiffViewProps> = ({ comparison, loading }) => {
 
   const renderUnifiedView = () => (
       comparison.unifiedLines.map((line, index) => {
-          const bg = getBgColor(line.type, comparison.diffMode);
+          const bg = getBgColor(line.type);
           
           return (
             <div key={index} className={`flex border-b border-slate-800 font-mono text-xs sm:text-sm ${bg}`}>
