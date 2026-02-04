@@ -1,0 +1,5 @@
+{
+  "name": "XML Diff Master",
+  "description": "A powerful offline XML comparison tool featuring line/word/character diffs, syntax highlighting, XML formatting, validation, and smart sorting for accurate comparisons.",
+  "requestFramePermissions": []
+}

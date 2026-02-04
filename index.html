@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XML Diff Master - Offline</title>
+    
+    <!-- 
+      OFFLINE USAGE INSTRUCTIONS:
+      To run this completely offline (without internet), download the following files 
+      and place them in a folder named 'lib' next to this html file.
+      
+      1. https://unpkg.com/react@18.2.0/umd/react.production.min.js -> lib/react.js
+      2. https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js -> lib/react-dom.js
+      3. https://unpkg.com/@babel/standalone@7.23.5/babel.min.js -> lib/babel.js
+      4. https://cdn.tailwindcss.com -> lib/tailwindcss.js
+      5. https://unpkg.com/diff@5.1.0/dist/diff.min.js -> lib/diff.js
+      6. https://unpkg.com/fast-xml-parser@4.3.2/src/fxp.min.js -> lib/fxp.js
+      7. https://unpkg.com/lucide-react@0.469.0/dist/umd/lucide-react.js -> lib/lucide-react.js
+      8. https://unpkg.com/clsx@2.0.0/dist/clsx.min.js -> lib/clsx.js
+      9. https://unpkg.com/tailwind-merge@2.2.0/dist/bundle.min.js -> lib/tailwind-merge.js
+      
+      Then switch the comments below to enable "Offline Mode".
+    -->
+
+    <!-- === CDN MODE (Default) === -->
+    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/diff@5.1.0/dist/diff.min.js"></script>
+    <script src="https://unpkg.com/fast-xml-parser@4.3.2/src/fxp.min.js"></script>
+    <!-- Note: lucide-react UMD does not have a .min.js version on unpkg for recent releases -->
+    <script src="https://unpkg.com/lucide-react@0.469.0/dist/umd/lucide-react.js"></script>
+    <script src="https://unpkg.com/clsx@2.0.0/dist/clsx.min.js"></script>
+    <script src="https://unpkg.com/tailwind-merge@2.2.0/dist/bundle.min.js"></script>
+
+    <!-- === OFFLINE MODE (Uncomment to use) === -->
+    <!--
+    <script src="lib/react.js"></script>
+    <script src="lib/react-dom.js"></script>
+    <script src="lib/babel.js"></script>
+    <script src="lib/tailwindcss.js"></script>
+    <script src="lib/diff.js"></script>
+    <script src="lib/fxp.js"></script>
+    <script src="lib/lucide-react.js"></script>
+    <script src="lib/clsx.js"></script>
+    <script src="lib/tailwind-merge.js"></script>
+    -->
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slate: {
+                750: '#2d3748', 
+                850: '#1a202c', 
+                950: '#0f172a', 
+              },
+              diff: {
+                add: 'rgba(16, 185, 129, 0.15)',      
+                addText: '#6ee7b7',                   
+                addHighlight: 'rgba(16, 185, 129, 0.4)', 
+                del: 'rgba(239, 68, 68, 0.15)',       
+                delText: '#fca5a5',                   
+                delHighlight: 'rgba(239, 68, 68, 0.4)',  
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: #1e293b; }
+      ::-webkit-scrollbar-thumb { background: #475569; border-radius: 5px; }
+      ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "fast-xml-parser": "https://esm.sh/fast-xml-parser@^5.3.4",
+    "diff": "https://esm.sh/diff@^8.0.3",
+    "clsx": "https://esm.sh/clsx@^2.1.1",
+    "tailwind-merge": "https://esm.sh/tailwind-merge@^3.4.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
+  }
+}
+</script>
+</head>
+<body class="bg-slate-950 text-slate-200 antialiased overflow-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="react,typescript">
+        // --- GLOBALS & UTILS ---
+        const { useState, useEffect, useCallback, useRef, useMemo } = React;
+        const { createRoot } = ReactDOM;
+        
+        // Lucide Icons
+        // Ensure lucideReact is available
+        if (typeof window.lucideReact === 'undefined') {
+            console.error("Lucide React library not loaded!");
+            document.body.innerHTML = '<div style="color:red; padding:20px;">Error: Library failed to load. Please check internet connection or file paths.</div>';
+            throw new Error("Lucide React not found");
+        }
+
+        const { 
+            Upload, X, AlertTriangle, Copy, Check, AlertCircle, Columns, 
+            LayoutList, ListOrdered, Hash, AlignLeft, ArrowLeftRight, 
+            FileCode, SortAsc, MessageSquareOff 
+        } = window.lucideReact;
+        
+        const { clsx } = window;
+        const { twMerge } = window.tailwindMerge;
+
+        // --- TYPES ---
+        // (Interfaces are stripped by Babel, defining simple objects/constants here)
+        const ViewMode = {
+            EDIT: 'EDIT',
+            DIFF: 'DIFF'
+        };
+
+        // --- SERVICES: XML SERVICE ---
+        // Accessing Fast-XML-Parser from global 'fxp'
+        const { XMLParser, XMLBuilder, XMLValidator } = window.fxp;
+
+        const parser = new XMLParser({
+            ignoreAttributes: false,
+            attributeNamePrefix: "@_",
+            allowBooleanAttributes: true,
+            parseTagValue: false,
+        });
+
+        const builder = new XMLBuilder({
+            ignoreAttributes: false,
+            attributeNamePrefix: "@_",
+            format: true,
+            indentBy: "  ",
+        });
+
+        const validateXML = (xml) => {
+            if (!xml.trim()) return null;
+            const result = XMLValidator.validate(xml);
+            if (result === true) return null;
+            return {
+                message: result.err.msg,
+                line: result.err.line
+            };
+        };
+
+        const formatXML = (xml) => {
+            try {
+                if (!xml.trim()) return '';
+                const jsonObj = parser.parse(xml);
+                return builder.build(jsonObj);
+            } catch (e) {
+                console.error("Format error", e);
+                return xml;
+            }
+        };
+
+        const sortObject = (obj) => {
+            if (Array.isArray(obj)) {
+                return obj.map(sortObject);
+            } else if (obj !== null && typeof obj === 'object') {
+                return Object.keys(obj)
+                .sort()
+                .reduce((result, key) => {
+                    result[key] = sortObject(obj[key]);
+                    return result;
+                }, {});
+            }
+            return obj;
+        };
+
+        const sortXML = (xml) => {
+            try {
+                if (!xml.trim()) return '';
+                const jsonObj = parser.parse(xml);
+                const sortedObj = sortObject(jsonObj);
+                return builder.build(sortedObj);
+            } catch (e) {
+                console.error("Sort error", e);
+                throw new Error("Failed to sort XML. Ensure it is valid first.");
+            }
+        };
+
+        const isMinified = (xml) => {
+            const trimmed = xml.trim();
+            return trimmed.length > 50 && !trimmed.includes('\n');
+        };
+
+        // --- SERVICES: DIFF SERVICE ---
+        // Accessing Diff from global 'Diff'
+        const computeDiff = (oldText, newText, mode, ignoreWhitespace, ignoreBlankLines, ignoreComments) => {
+            const options = { ignoreWhitespace };
+            
+            let finalOld = oldText;
+            let finalNew = newText;
+
+            if (ignoreComments) {
+                const commentRegex = /<!--[\s\S]*?-->/g;
+                finalOld = finalOld.replace(commentRegex, '');
+                finalNew = finalNew.replace(commentRegex, '');
+            }
+
+            if (ignoreBlankLines) {
+                finalOld = finalOld.split('\n').filter(l => l.trim() !== '').join('\n');
+                finalNew = finalNew.split('\n').filter(l => l.trim() !== '').join('\n');
+            }
+            
+            const changes = Diff.diffLines(finalOld, finalNew, { ...options, newlineIsToken: false });
+            
+            const leftLines = [];
+            const rightLines = [];
+            const unifiedLines = [];
+            
+            let leftLineNum = 1;
+            let rightLineNum = 1;
+            let unifiedOldLineNum = 1;
+            let unifiedNewLineNum = 1;
+
+            // Unified
+            changes.forEach(change => {
+                const lines = change.value.replace(/\n$/, '').split('\n');
+                if (change.value.endsWith('\n') && lines[lines.length - 1] === '') lines.pop();
+
+                lines.forEach(line => {
+                if (change.removed) {
+                    unifiedLines.push({ type: 'removed', value: line, oldLineNumber: unifiedOldLineNum++ });
+                } else if (change.added) {
+                    unifiedLines.push({ type: 'added', value: line, newLineNumber: unifiedNewLineNum++ });
+                } else {
+                    unifiedLines.push({ type: 'unchanged', value: line, oldLineNumber: unifiedOldLineNum++, newLineNumber: unifiedNewLineNum++ });
+                }
+                });
+            });
+
+            // Split
+            for (let i = 0; i < changes.length; i++) {
+                const change = changes[i];
+                const lines = change.value.replace(/\n$/, '').split('\n'); 
+                
+                if (change.value.endsWith('\n') && lines[lines.length - 1] === '') {
+                    lines.pop();
+                }
+                
+                if (change.removed && i + 1 < changes.length && changes[i + 1].added) {
+                    const nextChange = changes[i + 1];
+                    const nextLines = nextChange.value.replace(/\n$/, '').split('\n');
+                    if (nextChange.value.endsWith('\n') && nextLines[nextLines.length - 1] === '') nextLines.pop();
+
+                    const maxCount = Math.max(lines.length, nextLines.length);
+
+                    for (let j = 0; j < maxCount; j++) {
+                        if (j < lines.length) {
+                        leftLines.push({ type: 'removed', value: lines[j], lineNumber: leftLineNum++ });
+                        } else {
+                        leftLines.push({ type: 'phantom', value: '', lineNumber: undefined });
+                        }
+
+                        if (j < nextLines.length) {
+                        rightLines.push({ type: 'added', value: nextLines[j], lineNumber: rightLineNum++ });
+                        } else {
+                        rightLines.push({ type: 'phantom', value: '', lineNumber: undefined });
+                        }
+                    }
+                    
+                    i++; 
+                    continue;
+                }
+
+                if (change.removed) {
+                    lines.forEach(line => {
+                        leftLines.push({ type: 'removed', value: line, lineNumber: leftLineNum++ });
+                        rightLines.push({ type: 'phantom', value: '', lineNumber: undefined });
+                    });
+                }
+                else if (change.added) {
+                    lines.forEach(line => {
+                        leftLines.push({ type: 'phantom', value: '', lineNumber: undefined });
+                        rightLines.push({ type: 'added', value: line, lineNumber: rightLineNum++ });
+                    });
+                }
+                else {
+                    lines.forEach(line => {
+                        leftLines.push({ type: 'unchanged', value: line, lineNumber: leftLineNum++ });
+                        rightLines.push({ type: 'unchanged', value: line, lineNumber: rightLineNum++ });
+                    });
+                }
+            }
+
+            return { leftLines, rightLines, unifiedLines, diffMode: mode };
+        };
+
+        const getIntraLineDiff = (oldLine, newLine, mode) => {
+            if (mode === 'lines') return null;
+            if (mode === 'words') return Diff.diffWords(oldLine, newLine);
+            return Diff.diffChars(oldLine, newLine);
+        };
+
+        // --- COMPONENTS: BUTTON ---
+        const Button = ({ 
+            className, 
+            variant = 'secondary', 
+            size = 'md', 
+            active,
+            children, 
+            ...props 
+        }) => {
+            const baseStyles = "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:pointer-events-none disabled:opacity-50";
+            
+            const variants = {
+                primary: "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-900/20 border border-transparent",
+                secondary: "bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 hover:border-slate-600 shadow-sm",
+                ghost: "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+                danger: "bg-red-900/50 text-red-200 border border-red-900 hover:bg-red-900/70 hover:text-white"
+            };
+
+            const sizes = {
+                sm: "h-8 px-3 text-xs",
+                md: "h-9 px-4 py-2 text-sm",
+                lg: "h-10 px-6 text-base"
+            };
+
+            const activeStyles = active ? "bg-indigo-900/40 text-indigo-300 border-indigo-700/50 ring-1 ring-indigo-700/50" : "";
+
+            return (
+                <button 
+                className={twMerge(baseStyles, variants[variant], sizes[size], activeStyles, className)}
+                {...props}
+                >
+                {children}
+                </button>
+            );
+        };
+
+        // --- COMPONENTS: XML EDITOR ---
+        const XmlEditor = ({ 
+            value, 
+            onChange, 
+            label, 
+            error, 
+            onUpload,
+            onClear
+        }) => {
+            const fileInputRef = useRef(null);
+            const [copied, setCopied] = useState(false);
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files?.[0];
+                if (file && onUpload) {
+                onUpload(file);
+                }
+                if (fileInputRef.current) fileInputRef.current.value = '';
+            };
+
+            const handleCopy = async () => {
+                if (!value) return;
+                try {
+                await navigator.clipboard.writeText(value);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+                } catch (err) {
+                console.error('Failed to copy', err);
+                }
+            };
+
+            return (
+                <div className={`flex flex-col h-full border rounded-lg overflow-hidden bg-slate-900 shadow-md transition-colors ${error ? 'border-red-900/50' : 'border-slate-800'}`}>
+                <div className={`flex items-center justify-between px-3 py-2 border-b ${error ? 'bg-red-900/20 border-red-900/30' : 'bg-slate-800 border-slate-700'}`}>
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-300 text-sm uppercase tracking-wide">{label}</span>
+                        {error && (
+                            <div className="flex items-center text-red-400 text-xs gap-1 animate-pulse" title={error.message}>
+                                <AlertTriangle size={14} />
+                                <span className="truncate max-w-[150px] font-medium">Line {error.line}: Invalid XML</span>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileUpload} 
+                        accept=".xml,.txt,.json" 
+                        className="hidden" 
+                    />
+                    <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded transition-colors"
+                        title="Upload File"
+                    >
+                        <Upload size={16} />
+                    </button>
+                    
+                    <button 
+                        onClick={handleCopy}
+                        className={`p-1.5 rounded transition-colors ${copied ? 'text-green-400 bg-green-900/30' : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-700'}`}
+                        title="Copy to Clipboard"
+                        disabled={!value}
+                    >
+                        {copied ? <Check size={16} /> : <Copy size={16} />}
+                    </button>
+
+                    {value && (
+                        <button 
+                        onClick={onClear}
+                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                        title="Clear"
+                    >
+                        <X size={16} />
+                    </button>
+                    )}
+                    </div>
+                </div>
+                
+                <div className="relative flex-1 bg-slate-900">
+                    <textarea
+                    className="absolute inset-0 w-full h-full p-3 font-mono text-xs sm:text-sm resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500/50 bg-slate-900 text-slate-200 placeholder-slate-600"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={`Paste ${label} XML here...`}
+                    spellCheck={false}
+                    />
+                </div>
+                
+                {error && (
+                    <div className="px-3 py-1.5 bg-red-900/20 border-t border-red-900/30 text-red-300 text-xs flex items-start gap-2">
+                    <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                    <span>Error at line {error.line}: {error.message}</span>
+                    </div>
+                )}
+                </div>
+            );
+        };
+
+        // --- COMPONENTS: TOOLBAR ---
+        const Toolbar = ({
+            diffMode,
+            setDiffMode,
+            ignoreWhitespace,
+            setIgnoreWhitespace,
+            ignoreBlankLines,
+            setIgnoreBlankLines,
+            ignoreComments,
+            setIgnoreComments,
+            onSort,
+            onPrettify,
+            isEditing,
+            onToggleEdit,
+            hasContent
+        }) => {
+            return (
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between p-3 bg-slate-900 border-b border-slate-800 gap-3 shadow-sm z-10">
+                    <div className="flex items-center gap-4">
+                        <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent flex items-center gap-2">
+                            <FileCode className="text-indigo-400" />
+                            XML Diff
+                        </h1>
+                        
+                        <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
+                        
+                        <div className="flex items-center bg-slate-950 rounded-md p-1 border border-slate-800">
+                            {['lines', 'words', 'chars'].map((mode) => (
+                                <button
+                                    key={mode}
+                                    onClick={() => setDiffMode(mode)}
+                                    className={`px-3 py-1 text-xs font-medium rounded capitalize transition-all ${
+                                        diffMode === mode 
+                                        ? 'bg-slate-800 text-indigo-300 shadow-sm border border-slate-700' 
+                                        : 'text-slate-500 hover:text-slate-300'
+                                    }`}
+                                >
+                                    {mode}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none px-2 hover:text-indigo-300 transition-colors" title="Ignore leading/trailing whitespace">
+                            <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${ignoreWhitespace ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 bg-slate-800'}`}>
+                                {ignoreWhitespace && <Check size={10} className="text-white" />}
+                            </div>
+                            <input 
+                                type="checkbox" 
+                                className="hidden" 
+                                checked={ignoreWhitespace} 
+                                onChange={(e) => setIgnoreWhitespace(e.target.checked)} 
+                            />
+                            Trim Space
+                        </label>
+
+                        <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none px-2 hover:text-indigo-300 transition-colors" title="Ignore blank lines">
+                            <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${ignoreBlankLines ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 bg-slate-800'}`}>
+                                {ignoreBlankLines && <Check size={10} className="text-white" />}
+                            </div>
+                            <input 
+                                type="checkbox" 
+                                className="hidden" 
+                                checked={ignoreBlankLines} 
+                                onChange={(e) => setIgnoreBlankLines(e.target.checked)} 
+                            />
+                            No Blanks
+                        </label>
+
+                        <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none px-2 hover:text-indigo-300 transition-colors" title="Ignore XML comments">
+                            <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${ignoreComments ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 bg-slate-800'}`}>
+                                {ignoreComments && <Check size={10} className="text-white" />}
+                            </div>
+                            <input 
+                                type="checkbox" 
+                                className="hidden" 
+                                checked={ignoreComments} 
+                                onChange={(e) => setIgnoreComments(e.target.checked)} 
+                            />
+                            No Comments
+                        </label>
+
+                        <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
+
+                        <Button onClick={onPrettify} title="Format XML" size="sm" disabled={!hasContent}>
+                            <AlignLeft size={16} className="mr-1.5" />
+                            Format
+                        </Button>
+                        <Button onClick={onSort} title="Sort keys alphabetically" size="sm" disabled={!hasContent}>
+                            <SortAsc size={16} className="mr-1.5" />
+                            Sort
+                        </Button>
+
+                        <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
+
+                        <Button 
+                            onClick={onToggleEdit} 
+                            variant={isEditing ? 'primary' : 'secondary'}
+                            size="sm"
+                            className="min-w-[100px]"
+                        >
+                            <ArrowLeftRight size={16} className="mr-1.5" />
+                            {isEditing ? 'Compare' : 'Edit Inputs'}
+                        </Button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- COMPONENTS: DIFF VIEW ---
+        const LineContent = ({ line, mate, mode, type }) => {
+            const lineType = type || line.type;
+            if (lineType === 'phantom') return <span className="select-none">&nbsp;</span>;
+            
+            if (mode !== 'lines' && mate && mate.type !== 'phantom' && lineType !== 'unchanged' && mate.type !== 'unchanged') {
+                const changes = getIntraLineDiff(
+                    lineType === 'removed' ? line.value : mate.value, 
+                    lineType === 'added' ? line.value : mate.value, 
+                    mode
+                );
+                
+                if (changes) {
+                return (
+                    <span>
+                    {changes.map((part, idx) => {
+                        if (lineType === 'removed') {
+                        if (part.added) return null;
+                        return <span key={idx} className={part.removed ? "bg-red-500/30 text-red-100 rounded-[1px]" : ""}>{part.value}</span>
+                        }
+                        else {
+                        if (part.removed) return null;
+                        return <span key={idx} className={part.added ? "bg-green-500/30 text-green-100 rounded-[1px]" : ""}>{part.value}</span>
+                        }
+                    })}
+                    </span>
+                );
+                }
+            }
+
+            return <span className={lineType === 'unchanged' ? 'text-slate-300' : ''}>{line.value || ' '}</span>;
+        };
+
+        const DiffView = ({ comparison, loading }) => {
+            const [viewType, setViewType] = useState('split');
+            const [showLineNumbers, setShowLineNumbers] = useState(true);
+
+            if (loading) {
+                return (
+                <div className="flex h-full items-center justify-center text-slate-500">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mr-2"></div>
+                    Processing...
+                </div>
+                );
+            }
+
+            if (comparison.leftLines.length === 0 && comparison.rightLines.length === 0) {
+                return (
+                    <div className="flex h-full flex-col items-center justify-center text-slate-500 bg-slate-900/50">
+                        <AlertCircle className="w-12 h-12 mb-2 opacity-20" />
+                        <p>No content to compare.</p>
+                    </div>
+                )
+            }
+
+            const getBgColor = (type, mode) => {
+                if (type === 'removed') {
+                    return 'bg-diff-del text-diff-delText';
+                }
+                if (type === 'added') {
+                    return 'bg-diff-add text-diff-addText';
+                }
+                return 'text-slate-300';
+            };
+
+            const renderSplitView = () => (
+                comparison.leftLines.map((leftLine, index) => {
+                const rightLine = comparison.rightLines[index];
+                const leftBg = getBgColor(leftLine.type, comparison.diffMode);
+                const rightBg = getBgColor(rightLine.type, comparison.diffMode);
+                
+                return (
+                    <div key={index} className="flex border-b border-slate-800 hover:bg-slate-800/50 font-mono text-xs sm:text-sm">
+                    {showLineNumbers && (
+                        <div className="w-8 sm:w-12 shrink-0 select-none bg-slate-900 border-r border-slate-800 text-right pr-2 py-0.5 text-slate-600">
+                            {leftLine.lineNumber || ''}
+                        </div>
+                    )}
+                    <div className={`flex-1 overflow-x-auto whitespace-pre py-0.5 px-2 ${leftBg}`}>
+                        <LineContent line={leftLine} mate={rightLine} mode={comparison.diffMode} />
+                    </div>
+                    
+                    {showLineNumbers && (
+                        <div className="w-8 sm:w-12 shrink-0 select-none bg-slate-900 border-l border-r border-slate-800 text-right pr-2 py-0.5 text-slate-600">
+                            {rightLine.lineNumber || ''}
+                        </div>
+                    )}
+                    <div className={`flex-1 overflow-x-auto whitespace-pre py-0.5 px-2 ${rightBg}`}>
+                        <LineContent line={rightLine} mate={leftLine} mode={comparison.diffMode} />
+                    </div>
+                    </div>
+                );
+                })
+            );
+
+            const renderUnifiedView = () => (
+                comparison.unifiedLines.map((line, index) => {
+                    const bg = getBgColor(line.type, comparison.diffMode);
+                    
+                    return (
+                        <div key={index} className={`flex border-b border-slate-800 font-mono text-xs sm:text-sm ${bg}`}>
+                        {showLineNumbers && (
+                            <>
+                                <div className="w-8 sm:w-10 shrink-0 select-none text-right pr-2 py-0.5 text-slate-600 border-r border-slate-800/50 bg-slate-900">
+                                    {line.type !== 'added' ? line.oldLineNumber : ''}
+                                </div>
+                                <div className="w-8 sm:w-10 shrink-0 select-none text-right pr-2 py-0.5 text-slate-600 border-r border-slate-800/50 bg-slate-900">
+                                    {line.type !== 'removed' ? line.newLineNumber : ''}
+                                </div>
+                            </>
+                        )}
+                        <div className="w-6 shrink-0 select-none text-center py-0.5 text-slate-500 opacity-50">
+                                {line.type === 'added' && '+'}
+                                {line.type === 'removed' && '-'}
+                        </div>
+                        <div className="flex-1 overflow-x-auto whitespace-pre py-0.5 px-2">
+                                {line.value || ' '}
+                        </div>
+                        </div>
+                    )
+                })
+            );
+
+            return (
+                <div className="flex flex-col h-full bg-slate-900 shadow-sm overflow-hidden border-t border-slate-800">
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
+                        <div className="flex bg-slate-950 rounded-lg border border-slate-800 p-0.5">
+                            <button
+                                onClick={() => setViewType('split')}
+                                className={clsx(
+                                    "flex items-center px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                                    viewType === 'split' ? "bg-slate-800 text-indigo-300 shadow-sm border border-slate-700" : "text-slate-500 hover:text-slate-300"
+                                )}
+                            >
+                                <Columns size={14} className="mr-1.5" />
+                                Split
+                            </button>
+                            <button
+                                onClick={() => setViewType('unified')}
+                                className={clsx(
+                                    "flex items-center px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                                    viewType === 'unified' ? "bg-slate-800 text-indigo-300 shadow-sm border border-slate-700" : "text-slate-500 hover:text-slate-300"
+                                )}
+                            >
+                                <LayoutList size={14} className="mr-1.5" />
+                                Unified
+                            </button>
+                        </div>
+
+                        <button 
+                            onClick={() => setShowLineNumbers(!showLineNumbers)}
+                            className={clsx(
+                                "flex items-center px-2 py-1 text-xs font-medium rounded border transition-colors",
+                                showLineNumbers ? "bg-slate-800 border-indigo-900/50 text-indigo-300" : "bg-slate-900 border-slate-700 text-slate-500 hover:bg-slate-800"
+                            )}
+                            title="Toggle Line Numbers"
+                        >
+                        {showLineNumbers ? <ListOrdered size={14} className="mr-1" /> : <Hash size={14} className="mr-1" />}
+                        Line Nums
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-auto custom-scrollbar bg-slate-900">
+                        <div className="min-w-[600px]">
+                        {viewType === 'split' ? renderSplitView() : renderUnifiedView()}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP COMPONENT ---
+        const App = () => {
+            const [leftContent, setLeftContent] = useState('');
+            const [rightContent, setRightContent] = useState('');
+            
+            const [leftError, setLeftError] = useState(null);
+            const [rightError, setRightError] = useState(null);
+
+            const [diffMode, setDiffMode] = useState('lines');
+            const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
+            const [ignoreBlankLines, setIgnoreBlankLines] = useState(false);
+            const [ignoreComments, setIgnoreComments] = useState(false);
+            
+            const [comparison, setComparison] = useState({
+                leftLines: [],
+                rightLines: [],
+                unifiedLines: [],
+                diffMode: 'lines'
+            });
+            
+            const [viewState, setViewState] = useState('EDIT');
+            const [isProcessing, setIsProcessing] = useState(false);
+
+            useEffect(() => {
+                const t = setTimeout(() => setLeftError(validateXML(leftContent)), 500);
+                return () => clearTimeout(t);
+            }, [leftContent]);
+
+            useEffect(() => {
+                const t = setTimeout(() => setRightError(validateXML(rightContent)), 500);
+                return () => clearTimeout(t);
+            }, [rightContent]);
+
+            const handleContentChange = (side, text) => {
+                let finalVal = text;
+                if (isMinified(text)) {
+                    const formatted = formatXML(text);
+                    if (formatted !== text) {
+                        finalVal = formatted;
+                    }
+                }
+
+                if (side === 'left') setLeftContent(finalVal);
+                else setRightContent(finalVal);
+            };
+
+            const handleUpload = (side, file) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                const text = e.target?.result;
+                if (text) handleContentChange(side, text);
+                };
+                reader.readAsText(file);
+            };
+
+            const executeDiff = useCallback(() => {
+                setIsProcessing(true);
+                setTimeout(() => {
+                    const result = computeDiff(
+                        leftContent, 
+                        rightContent, 
+                        diffMode, 
+                        ignoreWhitespace, 
+                        ignoreBlankLines,
+                        ignoreComments
+                    );
+                    setComparison(result);
+                    setIsProcessing(false);
+                }, 10);
+            }, [leftContent, rightContent, diffMode, ignoreWhitespace, ignoreBlankLines, ignoreComments]);
+
+            useEffect(() => {
+                if (viewState === 'DIFF') {
+                    executeDiff();
+                }
+            }, [diffMode, ignoreWhitespace, ignoreBlankLines, ignoreComments, viewState, executeDiff]);
+
+            const handleToggleView = () => {
+                if (viewState === 'EDIT') {
+                    setViewState('DIFF');
+                } else {
+                    setViewState('EDIT');
+                }
+            };
+
+            const handleSort = () => {
+                try {
+                    if (leftContent) setLeftContent(sortXML(leftContent));
+                    if (rightContent) setRightContent(sortXML(rightContent));
+                } catch (e) {
+                    alert("Could not sort XML. Please ensure it is valid.");
+                }
+            };
+
+            const handlePrettify = () => {
+                if (leftContent) setLeftContent(formatXML(leftContent));
+                if (rightContent) setRightContent(formatXML(rightContent));
+            };
+
+            const hasContent = !!(leftContent || rightContent);
+
+            return (
+                <div className="flex flex-col h-screen bg-slate-950">
+                <Toolbar 
+                    diffMode={diffMode} 
+                    setDiffMode={setDiffMode}
+                    ignoreWhitespace={ignoreWhitespace}
+                    setIgnoreWhitespace={setIgnoreWhitespace}
+                    ignoreBlankLines={ignoreBlankLines}
+                    setIgnoreBlankLines={setIgnoreBlankLines}
+                    ignoreComments={ignoreComments}
+                    setIgnoreComments={setIgnoreComments}
+                    onSort={handleSort}
+                    onPrettify={handlePrettify}
+                    isEditing={viewState === 'EDIT'}
+                    onToggleEdit={handleToggleView}
+                    hasContent={hasContent}
+                />
+
+                <div className="flex-1 overflow-hidden relative">
+                    {viewState === 'EDIT' && (
+                        <div className="absolute inset-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                            <XmlEditor 
+                                label="Original / Left" 
+                                value={leftContent} 
+                                onChange={(val) => handleContentChange('left', val)} 
+                                error={leftError}
+                                onUpload={(f) => handleUpload('left', f)}
+                                onClear={() => setLeftContent('')}
+                            />
+                            <XmlEditor 
+                                label="Modified / Right" 
+                                value={rightContent} 
+                                onChange={(val) => handleContentChange('right', val)} 
+                                error={rightError}
+                                onUpload={(f) => handleUpload('right', f)}
+                                onClear={() => setRightContent('')}
+                            />
+                        </div>
+                    )}
+
+                    {viewState === 'DIFF' && (
+                        <DiffView comparison={comparison} loading={isProcessing} />
+                    )}
+                </div>
+                
+                {viewState === 'EDIT' && !hasContent && (
+                    <div className="absolute bottom-6 left-0 right-0 text-center pointer-events-none">
+                        <span className="bg-slate-800/90 backdrop-blur px-4 py-2 rounded-full text-slate-400 text-sm shadow-lg border border-slate-700">
+                            Paste XML content or drag & drop files to start
+                        </span>
+                    </div>
+                )}
+                </div>
+            );
+        };
+
+        // --- MOUNT ---
+        const rootElement = document.getElementById('root');
+        const root = createRoot(rootElement);
+        root.render(<App />);
+
+    </script>
+</body>
+</html>
