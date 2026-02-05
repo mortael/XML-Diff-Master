@@ -1,25 +1,24 @@
-import React from 'react';
-import { DiffMode } from '../types';
-import { Button } from './Button';
-import { AlignLeft, ArrowLeftRight, Check, FileCode, SortAsc } from 'lucide-react';
+import { FileCode, Check, AlignLeft, SortAsc, ArrowLeftRight } from 'lucide-react';
+import { SplitButton } from './ui/SplitButton';
+import { Button } from './ui/Button';
 
 interface ToolbarProps {
-    diffMode: DiffMode;
-    setDiffMode: (mode: DiffMode) => void;
+    diffMode: string;
+    setDiffMode: (mode: string) => void;
     ignoreWhitespace: boolean;
-    setIgnoreWhitespace: (val: boolean) => void;
+    setIgnoreWhitespace: (ignore: boolean) => void;
     ignoreBlankLines: boolean;
-    setIgnoreBlankLines: (val: boolean) => void;
+    setIgnoreBlankLines: (ignore: boolean) => void;
     ignoreComments: boolean;
-    setIgnoreComments: (val: boolean) => void;
-    onSort: () => void;
-    onPrettify: () => void;
+    setIgnoreComments: (ignore: boolean) => void;
+    onSort: (side?: 'left' | 'right' | 'both') => void;
+    onPrettify: (side?: 'left' | 'right' | 'both') => void;
     isEditing: boolean;
     onToggleEdit: () => void;
     hasContent: boolean;
 }
 
-export const Toolbar: React.FC<ToolbarProps> = ({
+export const Toolbar = ({
     diffMode,
     setDiffMode,
     ignoreWhitespace,
@@ -33,7 +32,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     isEditing,
     onToggleEdit,
     hasContent
-}) => {
+}: ToolbarProps) => {
     return (
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between p-3 bg-slate-900 border-b border-slate-800 gap-3 shadow-sm z-10">
             <div className="flex items-center gap-4">
@@ -45,13 +44,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
 
                 <div className="flex items-center bg-slate-950 rounded-md p-1 border border-slate-800">
-                    {(['lines', 'words', 'chars'] as DiffMode[]).map((mode) => (
+                    {['lines', 'words', 'chars'].map((mode) => (
                         <button
                             key={mode}
                             onClick={() => setDiffMode(mode)}
                             className={`px-3 py-1 text-xs font-medium rounded capitalize transition-all ${diffMode === mode
-                                    ? 'bg-slate-800 text-indigo-300 shadow-sm border border-slate-700'
-                                    : 'text-slate-500 hover:text-slate-300'
+                                ? 'bg-slate-800 text-indigo-300 shadow-sm border border-slate-700'
+                                : 'text-slate-500 hover:text-slate-300'
                                 }`}
                         >
                             {mode}
@@ -102,14 +101,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
                 <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
 
-                <Button onClick={onPrettify} title="Format XML" size="sm" disabled={!hasContent}>
-                    <AlignLeft size={16} className="mr-1.5" />
-                    Format
-                </Button>
-                <Button onClick={onSort} title="Sort keys alphabetically" size="sm" disabled={!hasContent}>
-                    <SortAsc size={16} className="mr-1.5" />
-                    Sort
-                </Button>
+                <SplitButton
+                    label="Format"
+                    icon={AlignLeft}
+                    onClick={onPrettify}
+                    disabled={!hasContent}
+                />
+
+                <SplitButton
+                    label="Sort"
+                    icon={SortAsc}
+                    onClick={onSort}
+                    disabled={!hasContent}
+                />
 
                 <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
 

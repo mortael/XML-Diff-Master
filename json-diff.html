@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JSON Diff Master - Offline</title>
+
+    <!-- 
+      OFFLINE USAGE INSTRUCTIONS:
+      To run this completely offline (without internet), download the following files 
+      and place them in a folder named 'lib' next to this html file.
+      
+      1. https://unpkg.com/react@18.2.0/umd/react.production.min.js -> lib/react.js
+      2. https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js -> lib/react-dom.js
+      3. https://unpkg.com/@babel/standalone@7.23.5/babel.min.js -> lib/babel.js
+      4. https://cdn.tailwindcss.com -> lib/tailwindcss.js
+      5. https://unpkg.com/diff@5.1.0/dist/diff.min.js -> lib/diff.js
+      
+      Then switch the comments below to enable "Offline Mode".
+      Note: JSON parsing, icons, clsx, and tailwind-merge now use native browser APIs - fewer external libraries needed!
+    -->
+
+    <!-- === CDN MODE (Default) === -->
+    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/diff@5.1.0/dist/diff.min.js"></script>
+
+    <!-- === OFFLINE MODE (Uncomment to use) === -->
+    <!--
+    <script src="lib/react.js"></script>
+    <script src="lib/react-dom.js"></script>
+    <script src="lib/babel.js"></script>
+    <script src="lib/tailwindcss.js"></script>
+    <script src="lib/diff.js"></script>
+    -->
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            750: '#2d3748',
+                            850: '#1a202c',
+                            950: '#0f172a',
+                        },
+                        diff: {
+                            add: 'rgba(16, 185, 129, 0.15)',
+                            addText: '#6ee7b7',
+                            addHighlight: 'rgba(16, 185, 129, 0.4)',
+                            del: 'rgba(239, 68, 68, 0.15)',
+                            delText: '#fca5a5',
+                            delHighlight: 'rgba(239, 68, 68, 0.4)',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-slate-200 antialiased overflow-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="react,typescript">
+        // --- GLOBALS & UTILS ---
+        const { useState, useEffect, useCallback, useRef, useMemo } = React;
+        const { createRoot } = ReactDOM;
+
+        // --- INLINE SVG ICONS (No external dependency) ---
+        const Icon = ({ children, size = 24, className = '', ...props }) => (
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width={size}
+                height={size}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={className}
+                {...props}
+            >
+                {children}
+            </svg>
+        );
+
+        const Upload = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></Icon>;
+        const X = (props) => <Icon {...props}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>;
+        const AlertTriangle = (props) => <Icon {...props}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></Icon>;
+        const Copy = (props) => <Icon {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></Icon>;
+        const Check = (props) => <Icon {...props}><polyline points="20 6 9 17 4 12" /></Icon>;
+        const AlertCircle = (props) => <Icon {...props}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></Icon>;
+        const Columns = (props) => <Icon {...props}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="12" y1="3" x2="12" y2="21" /></Icon>;
+        const LayoutList = (props) => <Icon {...props}><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></Icon>;
+        const ListOrdered = (props) => <Icon {...props}><line x1="10" y1="6" x2="21" y2="6" /><line x1="10" y1="12" x2="21" y2="12" /><line x1="10" y1="18" x2="21" y2="18" /><path d="M4 6h1v4" /><path d="M4 10h2" /><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" /></Icon>;
+        const Hash = (props) => <Icon {...props}><line x1="4" y1="9" x2="20" y2="9" /><line x1="4" y1="15" x2="20" y2="15" /><line x1="10" y1="3" x2="8" y2="21" /><line x1="16" y1="3" x2="14" y2="21" /></Icon>;
+        const AlignLeft = (props) => <Icon {...props}><line x1="17" y1="10" x2="3" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="3" y2="18" /></Icon>;
+        const ArrowLeftRight = (props) => <Icon {...props}><polyline points="17 11 21 7 17 3" /><line x1="21" y1="7" x2="9" y2="7" /><polyline points="7 21 3 17 7 13" /><line x1="3" y1="17" x2="15" y2="17" /></Icon>;
+        const FileCode = (props) => <Icon {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M10 13l-2 2 2 2" /><path d="M14 17l2-2-2-2" /></Icon>;
+        const SortAsc = (props) => <Icon {...props}><path d="M11 5h10" /><path d="M11 9h7" /><path d="M11 13h4" /><path d="M3 17l3 3 3-3" /><path d="M6 18V4" /></Icon>;
+        const Settings = (props) => <Icon {...props}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></Icon>;
+        const RotateCcw = (props) => <Icon {...props}><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></Icon>;
+        const Search = (props) => <Icon {...props}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></Icon>;
+        const ChevronUp = (props) => <Icon {...props}><polyline points="18 15 12 9 6 15" /></Icon>;
+        const ChevronDown = (props) => <Icon {...props}><polyline points="6 9 12 15 18 9" /></Icon>;
+
+        // --- UTILITY FUNCTIONS (inline, no CDN needed) ---
+        // clsx - simple class name joiner
+        const clsx = (...args) => args.flat().filter(x => typeof x === 'string' && x.trim()).join(' ');
+
+        // twMerge - simplified version that just joins classes (no conflict resolution)
+        const twMerge = (...args) => args.flat().filter(Boolean).join(' ');
+
+        // --- TYPES ---
+        // (Interfaces are stripped by Babel, defining simple objects/constants here)
+        const ViewMode = {
+            EDIT: 'EDIT',
+            DIFF: 'DIFF'
+        };
+
+        // --- SERVICES: JSON SERVICE (using native browser APIs) ---
+        const validateJSON = (json) => {
+            if (!json || !json.trim()) return null;
+            try {
+                JSON.parse(json);
+                return null;
+            } catch (e) {
+                const posMatch = e.message.match(/position (\d+)/i);
+                let line = 1;
+                if (posMatch) { line = json.substring(0, parseInt(posMatch[1])).split('\n').length; }
+                return { message: e.message, line };
+            }
+        };
+
+        const formatJSON = (json) => {
+            if (!json || !json.trim()) return '';
+            try { return JSON.stringify(JSON.parse(json), null, 2); }
+            catch { return json; }
+        };
+
+        const sortJSON = (json) => {
+            if (!json || !json.trim()) return '';
+            try {
+                const sortObj = (o) => {
+                    if (Array.isArray(o)) return o.map(sortObj);
+                    if (o !== null && typeof o === 'object') {
+                        return Object.keys(o).sort().reduce((acc, k) => { acc[k] = sortObj(o[k]); return acc; }, {});
+                    }
+                    return o;
+                };
+                return JSON.stringify(sortObj(JSON.parse(json)), null, 2);
+            } catch { throw new Error("Failed to sort JSON. Ensure it is valid."); }
+        };
+
+        const isMinified = (json) => json && json.trim().length > 50 && !json.trim().includes('\n');
+        // --- SERVICES: DIFF SERVICE ---
+        // Accessing Diff from global 'Diff'
+        const computeDiff = (oldText, newText, mode, ignoreWhitespace, ignoreBlankLines, ignoreComments) => {
+            const options = { ignoreWhitespace };
+
+            let finalOld = oldText;
+            let finalNew = newText;
+
+            if (ignoreComments) {
+                const commentRegex = /<!--[\s\S]*?-->/g;
+                finalOld = finalOld.replace(commentRegex, '');
+                finalNew = finalNew.replace(commentRegex, '');
+            }
+
+            if (ignoreBlankLines) {
+                finalOld = finalOld.split('\n').filter(l => l.trim() !== '').join('\n');
+                finalNew = finalNew.split('\n').filter(l => l.trim() !== '').join('\n');
+            }
+
+            const changes = Diff.diffLines(finalOld, finalNew, { ...options, newlineIsToken: false });
+
+            const leftLines = [];
+            const rightLines = [];
+            const unifiedLines = [];
+
+            let leftLineNum = 1;
+            let rightLineNum = 1;
+            let unifiedOldLineNum = 1;
+            let unifiedNewLineNum = 1;
+
+            // Unified
+            changes.forEach(change => {
+                const lines = change.value.replace(/\n$/, '').split('\n');
+                if (change.value.endsWith('\n') && lines[lines.length - 1] === '') lines.pop();
+
+                lines.forEach(line => {
+                    if (change.removed) {
+                        unifiedLines.push({ type: 'removed', value: line, oldLineNumber: unifiedOldLineNum++ });
+                    } else if (change.added) {
+                        unifiedLines.push({ type: 'added', value: line, newLineNumber: unifiedNewLineNum++ });
+                    } else {
+                        unifiedLines.push({ type: 'unchanged', value: line, oldLineNumber: unifiedOldLineNum++, newLineNumber: unifiedNewLineNum++ });
+                    }
+                });
+            });
+
+            // Split
+            for (let i = 0; i < changes.length; i++) {
+                const change = changes[i];
+                const lines = change.value.replace(/\n$/, '').split('\n');
+
+                if (change.value.endsWith('\n') && lines[lines.length - 1] === '') {
+                    lines.pop();
+                }
+
+                if (change.removed && i + 1 < changes.length && changes[i + 1].added) {
+                    const nextChange = changes[i + 1];
+                    const nextLines = nextChange.value.replace(/\n$/, '').split('\n');
+                    if (nextChange.value.endsWith('\n') && nextLines[nextLines.length - 1] === '') nextLines.pop();
+
+                    const maxCount = Math.max(lines.length, nextLines.length);
+
+                    for (let j = 0; j < maxCount; j++) {
+                        if (j < lines.length) {
+                            leftLines.push({ type: 'removed', value: lines[j], lineNumber: leftLineNum++ });
+                        } else {
+                            leftLines.push({ type: 'phantom', value: '', lineNumber: undefined });
+                        }
+
+                        if (j < nextLines.length) {
+                            rightLines.push({ type: 'added', value: nextLines[j], lineNumber: rightLineNum++ });
+                        } else {
+                            rightLines.push({ type: 'phantom', value: '', lineNumber: undefined });
+                        }
+                    }
+
+                    i++;
+                    continue;
+                }
+
+                if (change.removed) {
+                    lines.forEach(line => {
+                        leftLines.push({ type: 'removed', value: line, lineNumber: leftLineNum++ });
+                        rightLines.push({ type: 'phantom', value: '', lineNumber: undefined });
+                    });
+                }
+                else if (change.added) {
+                    lines.forEach(line => {
+                        leftLines.push({ type: 'phantom', value: '', lineNumber: undefined });
+                        rightLines.push({ type: 'added', value: line, lineNumber: rightLineNum++ });
+                    });
+                }
+                else {
+                    lines.forEach(line => {
+                        leftLines.push({ type: 'unchanged', value: line, lineNumber: leftLineNum++ });
+                        rightLines.push({ type: 'unchanged', value: line, lineNumber: rightLineNum++ });
+                    });
+                }
+            }
+
+            return { leftLines, rightLines, unifiedLines, diffMode: mode };
+        };
+
+        const getIntraLineDiff = (oldLine, newLine, mode) => {
+            if (mode === 'lines') return null;
+            if (mode === 'words') return Diff.diffWords(oldLine, newLine);
+            return Diff.diffChars(oldLine, newLine);
+        };
+
+        // --- COMPONENTS: BUTTON ---
+        const Button = ({
+            className,
+            variant = 'secondary',
+            size = 'md',
+            active,
+            children,
+            ...props
+        }) => {
+            const baseStyles = "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:pointer-events-none disabled:opacity-50";
+
+            const variants = {
+                primary: "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-900/20 border border-transparent",
+                secondary: "bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 hover:border-slate-600 shadow-sm",
+                ghost: "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+                danger: "bg-red-900/50 text-red-200 border border-red-900 hover:bg-red-900/70 hover:text-white"
+            };
+
+            const sizes = {
+                sm: "h-8 px-3 text-xs",
+                md: "h-9 px-4 py-2 text-sm",
+                lg: "h-10 px-6 text-base"
+            };
+
+            const activeStyles = active ? "bg-indigo-900/40 text-indigo-300 border-indigo-700/50 ring-1 ring-indigo-700/50" : "";
+
+            return (
+                <button
+                    className={twMerge(baseStyles, variants[variant], sizes[size], activeStyles, className)}
+                    {...props}
+                >
+                    {children}
+                </button>
+            );
+        };
+
+        // --- JSON SCHEMA VALIDATION ---
+        const validateAgainstSchema = (xml, xsd) => {
+            if (!xml || !xsd) return { valid: true, errors: [] };
+
+            const errors = [];
+            const parser = new DOMParser();
+
+            // Parse XSD
+            const xsdDoc = parser.parseFromString(xsd, 'application/xml');
+            if (xsdDoc.querySelector('parsererror')) {
+                return { valid: false, errors: [{ line: 1, message: 'Invalid JSON SCHEMA format' }] };
+            }
+
+            // Parse XML
+            const xmlDoc = parser.parseFromString(xml, 'application/xml');
+            if (xmlDoc.querySelector('parsererror')) {
+                return { valid: false, errors: [{ line: 1, message: 'XML is not well-formed' }] };
+            }
+
+            // Extract element definitions from XSD
+            const elementDefs = new Map();
+            const complexTypes = new Map();
+
+            // Parse complex types
+            xsdDoc.querySelectorAll('[localName="complexType"], complexType').forEach(ct => {
+                const name = ct.getAttribute('name');
+                if (name) {
+                    const elements = [];
+                    const attrs = [];
+                    ct.querySelectorAll('[localName="element"], element').forEach(e => {
+                        elements.push({
+                            name: e.getAttribute('name') || e.getAttribute('ref'),
+                            minOccurs: parseInt(e.getAttribute('minOccurs') || '1'),
+                            maxOccurs: e.getAttribute('maxOccurs') === 'unbounded' ? Infinity : parseInt(e.getAttribute('maxOccurs') || '1')
+                        });
+                    });
+                    ct.querySelectorAll('[localName="attribute"], attribute').forEach(a => {
+                        attrs.push({
+                            name: a.getAttribute('name'),
+                            required: a.getAttribute('use') === 'required'
+                        });
+                    });
+                    complexTypes.set(name, { elements, attrs });
+                }
+            });
+
+            // Parse element definitions
+            xsdDoc.querySelectorAll(':scope > [localName="element"], :scope > element, schema > element').forEach(el => {
+                const name = el.getAttribute('name');
+                const type = el.getAttribute('type');
+                if (name) {
+                    elementDefs.set(name, { type, element: el });
+                }
+            });
+
+            // Validate root element
+            const rootName = xmlDoc.documentElement.localName;
+            if (elementDefs.size > 0 && !elementDefs.has(rootName)) {
+                const validRoots = Array.from(elementDefs.keys()).join(', ');
+                errors.push({ line: 1, message: `Root element <${rootName}> is not defined in schema. Expected: ${validRoots}` });
+            }
+
+            // Check for required attributes
+            const checkElement = (xmlEl, depth = 0) => {
+                if (depth > 100) return; // Prevent infinite recursion
+                const elName = xmlEl.localName;
+                const def = elementDefs.get(elName);
+
+                if (def && def.type && complexTypes.has(def.type)) {
+                    const typeDef = complexTypes.get(def.type);
+
+                    // Check required attributes
+                    typeDef.attrs.forEach(attr => {
+                        if (attr.required && !xmlEl.hasAttribute(attr.name)) {
+                            const lineNum = getLineNumber(xml, xmlEl.outerHTML.substring(0, 50));
+                            errors.push({ line: lineNum, message: `Missing required attribute "${attr.name}" on <${elName}>` });
+                        }
+                    });
+
+                    // Check required child elements
+                    typeDef.elements.forEach(childDef => {
+                        if (childDef.minOccurs > 0) {
+                            const count = xmlEl.querySelectorAll(':scope > ' + childDef.name).length;
+                            if (count < childDef.minOccurs) {
+                                const lineNum = getLineNumber(xml, xmlEl.outerHTML.substring(0, 50));
+                                errors.push({ line: lineNum, message: `Element <${elName}> requires at least ${childDef.minOccurs} <${childDef.name}> child element(s)` });
+                            }
+                        }
+                    });
+                }
+
+                // Recursively check children
+                Array.from(xmlEl.children).forEach(child => checkElement(child, depth + 1));
+            };
+
+            const getLineNumber = (xmlStr, search) => {
+                const idx = xmlStr.indexOf(search);
+                if (idx === -1) return 1;
+                return xmlStr.substring(0, idx).split('\n').length;
+            };
+
+            checkElement(xmlDoc.documentElement);
+
+            return { valid: errors.length === 0, errors };
+        };
+
+        // --- JSON SYNTAX HIGHLIGHTER ---
+        const defaultColors = { tagBracket: '#818cf8', tagName: '#f472b6', attrName: '#67e8f9', attrValue: '#a3e635', comment: '#6b7280', text: '#e2e8f0' };
+        const highlightJSON = (xml, colors = defaultColors) => {
+            if (!xml) return '';
+            const col = colors || defaultColors;
+            let r = '', i = 0, n = xml.length;
+            const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const c = (k, t) => '<span style="color:' + k + '">' + e(t) + '</span>';
+            while (i < n) {
+                if (xml.slice(i, i + 4) === '<!--') { let x = xml.indexOf('-->', i); x = x < 0 ? n : x + 3; r += '<span style="color:' + col.comment + ';font-style:italic">' + e(xml.slice(i, x)) + '</span>'; i = x; }
+                else if (xml[i] === '<') {
+                    let j = i + 1, cl = xml[j] === '/'; if (cl) j++; let t = '';
+                    while (j < n && /[\w:-]/.test(xml[j])) { t += xml[j++]; }
+                    r += c(col.tagBracket, cl ? '</' : '<'); if (t) r += c(col.tagName, t);
+                    while (j < n && xml[j] !== '>' && !(xml[j] === '/' && xml[j + 1] === '>')) {
+                        if (/\s/.test(xml[j])) { r += xml[j++]; }
+                        else if (/[\w:-]/.test(xml[j])) {
+                            let a = ''; while (j < n && /[\w:-]/.test(xml[j])) { a += xml[j++]; } r += c(col.attrName, a);
+                            while (j < n && /\s/.test(xml[j])) { r += xml[j++]; }
+                            if (xml[j] === '=') {
+                                r += c('#94a3b8', '='); j++; while (j < n && /\s/.test(xml[j])) { r += xml[j++]; }
+                                if (xml[j] === '"' || xml[j] === "'") { let q = xml[j], v = q; j++; while (j < n && xml[j] !== q) { v += xml[j++]; } if (j < n) { v += xml[j++]; } r += c(col.attrValue, v); }
+                            }
+                        } else { r += e(xml[j++]); }
+                    }
+                    if (xml[j] === '/' && xml[j + 1] === '>') { r += c(col.tagBracket, '/>'); j += 2; } else if (xml[j] === '>') { r += c(col.tagBracket, '>'); j++; }
+                    i = j;
+                } else { let t = ''; while (i < n && xml[i] !== '<') { t += xml[i++]; } r += '<span style="color:' + col.text + '">' + e(t) + '</span>'; }
+            }
+            return r;
+        };
+
+        // --- COMPONENTS: JSON EDITOR ---
+        const JsonEditor = ({
+            value,
+            onChange,
+            label,
+            error,
+            onUpload,
+            onClear,
+            settings,
+            schemaErrors = [],
+            onFormat
+        }) => {
+            const fileInputRef = useRef(null);
+            const textareaRef = useRef(null);
+            const preRef = useRef(null);
+            const [copied, setCopied] = useState(false);
+            const [isDragging, setIsDragging] = useState(false);
+            const [showSearch, setShowSearch] = useState(false);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [searchMatches, setSearchMatches] = useState([]);
+            const [currentMatch, setCurrentMatch] = useState(0);
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files?.[0];
+                if (file && onUpload) {
+                    onUpload(file);
+                }
+                if (fileInputRef.current) fileInputRef.current.value = '';
+            };
+
+            const handlePaste = (e) => {
+                if (settings?.editor?.autoFormat && onFormat) {
+                    // Start with a simple heuristic: if the pasted content looks like XML/JSON root
+                    const pasted = e.clipboardData.getData('text');
+                    const trimmed = pasted.trim();
+                    if (trimmed.startsWith('<') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                        e.preventDefault();
+                        const formatted = onFormat(pasted);
+
+                        // Insert at cursor or replace selection
+                        const textarea = textareaRef.current;
+                        const start = textarea.selectionStart;
+                        const end = textarea.selectionEnd;
+
+                        const before = value.substring(0, start);
+                        const after = value.substring(end);
+
+                        // If pasting into empty editor, just set value
+                        if (!value) {
+                            onChange(formatted);
+                        } else {
+                            onChange(before + formatted + after);
+                        }
+                    }
+                }
+            };
+
+            const handleCopy = async () => {
+                if (!value) return;
+                try {
+                    await navigator.clipboard.writeText(value);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                } catch (err) {
+                    console.error('Failed to copy', err);
+                }
+            };
+
+            // Drag & Drop handlers
+            const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+            const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
+            const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); };
+            const handleDrop = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file && onUpload) onUpload(file);
+            };
+
+            // Scroll sync - keep pre and textarea scroll positions in sync
+            const handleScroll = (e) => {
+                if (preRef.current) {
+                    preRef.current.scrollTop = e.target.scrollTop;
+                    preRef.current.scrollLeft = e.target.scrollLeft;
+                }
+            };
+
+            // Line Jump - scroll to error line
+            const jumpToLine = (lineNum) => {
+                if (!textareaRef.current) return;
+                const lines = value.split('\n');
+                let charPos = 0;
+                for (let i = 0; i < Math.min(lineNum - 1, lines.length); i++) {
+                    charPos += lines[i].length + 1;
+                }
+                textareaRef.current.focus();
+                textareaRef.current.setSelectionRange(charPos, charPos + (lines[lineNum - 1]?.length || 0));
+                // Scroll to position
+                const lineHeight = 20;
+                textareaRef.current.scrollTop = (lineNum - 5) * lineHeight;
+            };
+
+            // Search functionality
+            useEffect(() => {
+                if (!searchQuery || !value) {
+                    setSearchMatches([]);
+                    return;
+                }
+                const matches = [];
+                const query = searchQuery.toLowerCase();
+                let idx = value.toLowerCase().indexOf(query);
+                while (idx !== -1) {
+                    matches.push(idx);
+                    idx = value.toLowerCase().indexOf(query, idx + 1);
+                }
+                setSearchMatches(matches);
+                setCurrentMatch(0);
+            }, [searchQuery, value]);
+
+            const goToMatch = (index) => {
+                if (!textareaRef.current || searchMatches.length === 0) return;
+                const pos = searchMatches[index];
+                textareaRef.current.focus();
+                textareaRef.current.setSelectionRange(pos, pos + searchQuery.length);
+            };
+
+            const nextMatch = () => {
+                const next = (currentMatch + 1) % searchMatches.length;
+                setCurrentMatch(next);
+                goToMatch(next);
+            };
+
+            const prevMatch = () => {
+                const prev = (currentMatch - 1 + searchMatches.length) % searchMatches.length;
+                setCurrentMatch(prev);
+                goToMatch(prev);
+            };
+
+            // Keyboard shortcut for search
+            useEffect(() => {
+                const handler = (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                        e.preventDefault();
+                        setShowSearch(true);
+                    }
+                    if (e.key === 'Escape') {
+                        setShowSearch(false);
+                        setSearchQuery('');
+                    }
+                };
+                window.addEventListener('keydown', handler);
+                return () => window.removeEventListener('keydown', handler);
+            }, []);
+
+            return (
+                <div
+                    className={`flex flex-col h-full border rounded-lg overflow-hidden bg-slate-900 shadow-md transition-colors ${isDragging ? 'border-indigo-500 border-2' : error ? 'border-red-900/50' : 'border-slate-800'}`}
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    <div className={`flex items-center justify-between px-3 py-2 border-b ${error ? 'bg-red-900/20 border-red-900/30' : 'bg-slate-800 border-slate-700'}`}>
+                        <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-300 text-sm uppercase tracking-wide">{label}</span>
+                            {error && (
+                                <button
+                                    onClick={() => jumpToLine(error.line)}
+                                    className="flex items-center text-red-400 text-xs gap-1 animate-pulse hover:text-red-300 cursor-pointer"
+                                    title={`Click to jump to line ${error.line}`}
+                                >
+                                    <AlertTriangle size={14} />
+                                    <span className="truncate max-w-[150px] font-medium underline">Line {error.line}: Invalid JSON</span>
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setShowSearch(!showSearch)}
+                                className={`p-1.5 rounded transition-colors ${showSearch ? 'text-indigo-400 bg-indigo-900/30' : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-700'}`}
+                                title="Search (Ctrl+F)"
+                            >
+                                <Search size={16} />
+                            </button>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileUpload}
+                                accept=".json,.txt"
+                                className="hidden"
+                            />
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded transition-colors"
+                                title="Upload File"
+                            >
+                                <Upload size={16} />
+                            </button>
+
+                            <button
+                                onClick={handleCopy}
+                                className={`p-1.5 rounded transition-colors ${copied ? 'text-green-400 bg-green-900/30' : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-700'}`}
+                                title="Copy to Clipboard"
+                                disabled={!value}
+                            >
+                                {copied ? <Check size={16} /> : <Copy size={16} />}
+                            </button>
+
+                            {value && (
+                                <button
+                                    onClick={onClear}
+                                    className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                                    title="Clear"
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Search Bar */}
+                    {showSearch && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border-b border-slate-700">
+                            <Search size={14} className="text-slate-500" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.shiftKey ? prevMatch() : nextMatch(); }}
+                                placeholder="Search..."
+                                className="flex-1 bg-slate-700 text-slate-200 text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-indigo-500"
+                                autoFocus
+                            />
+                            <span className="text-xs text-slate-500 min-w-[60px]">
+                                {searchMatches.length > 0 ? `${currentMatch + 1} / ${searchMatches.length}` : 'No matches'}
+                            </span>
+                            <button onClick={prevMatch} className="p-1 text-slate-400 hover:text-slate-200" disabled={searchMatches.length === 0}><ChevronUp size={16} /></button>
+                            <button onClick={nextMatch} className="p-1 text-slate-400 hover:text-slate-200" disabled={searchMatches.length === 0}><ChevronDown size={16} /></button>
+                            <button onClick={() => { setShowSearch(false); setSearchQuery(''); }} className="p-1 text-slate-400 hover:text-slate-200"><X size={16} /></button>
+                        </div>
+                    )}
+
+                    <div className="relative flex-1 bg-slate-900 overflow-hidden">
+                        {/* Drag overlay */}
+                        {isDragging && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-indigo-900/30 backdrop-blur-sm border-2 border-dashed border-indigo-400 rounded">
+                                <div className="text-indigo-300 font-medium flex items-center gap-2">
+                                    <Upload size={24} /> Drop JSON file here
+                                </div>
+                            </div>
+                        )}
+                        <pre
+                            ref={preRef}
+                            className="absolute inset-0 w-full h-full p-3 font-mono text-xs sm:text-sm overflow-hidden pointer-events-none whitespace-pre-wrap break-all m-0"
+                            style={{ color: '#e2e8f0', lineHeight: '1.5' }}
+                            aria-hidden="true"
+                            dangerouslySetInnerHTML={{ __html: highlightJSON(value, settings?.colors) + '\n' }}
+                        />
+                        <textarea
+                            ref={textareaRef}
+                            className="absolute inset-0 w-full h-full p-3 font-mono text-xs sm:text-sm resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500/50 bg-transparent text-transparent caret-slate-200 placeholder-slate-600 overflow-auto"
+                            value={value}
+                            onChange={(e) => onChange(e.target.value)}
+                            onScroll={handleScroll}
+                            onPaste={handlePaste}
+                            placeholder={`Paste ${label} XML here or drag & drop a file...`}
+                            spellCheck={false}
+                            style={{ caretColor: '#e2e8f0', lineHeight: '1.5' }}
+                        />
+                    </div>
+
+                    {error && (
+                        <button
+                            onClick={() => jumpToLine(error.line)}
+                            className="px-3 py-1.5 bg-red-900/20 border-t border-red-900/30 text-red-300 text-xs flex items-start gap-2 hover:bg-red-900/30 transition-colors cursor-pointer w-full text-left"
+                        >
+                            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                            <span className="underline">Click to jump to line {error.line}: {error.message}</span>
+                        </button>
+                    )}
+
+                    {/* Schema Validation Errors */}
+                    {schemaErrors.length > 0 && (
+                        <div className="px-3 py-1.5 bg-amber-900/20 border-t border-amber-900/30 text-amber-300 text-xs max-h-20 overflow-y-auto">
+                            <div className="flex items-center gap-1 font-medium mb-1">
+                                <FileCode size={12} /> Schema Validation ({schemaErrors.length} issue{schemaErrors.length > 1 ? 's' : ''})
+                            </div>
+                            {schemaErrors.slice(0, 5).map((err, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => jumpToLine(err.line)}
+                                    className="block w-full text-left text-amber-400 hover:text-amber-200 truncate py-0.5 underline"
+                                >
+                                    Line {err.line}: {err.message}
+                                </button>
+                            ))}
+                            {schemaErrors.length > 5 && <div className="text-amber-500">...and {schemaErrors.length - 5} more</div>}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- COMPONENTS: TOOLBAR ---
+        const Toolbar = ({
+            diffMode,
+            setDiffMode,
+            ignoreWhitespace,
+            setIgnoreWhitespace,
+            ignoreBlankLines,
+            setIgnoreBlankLines,
+            ignoreComments,
+            setIgnoreComments,
+            onSort,
+            onPrettify,
+            isEditing,
+            onToggleEdit,
+            hasContent
+        }) => {
+            return (
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between p-3 bg-slate-900 border-b border-slate-800 gap-3 shadow-sm z-10">
+                    <div className="flex items-center gap-4">
+                        <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent flex items-center gap-2">
+                            <FileCode className="text-indigo-400" />
+                            XML Diff
+                        </h1>
+
+                        <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
+
+                        <div className="flex items-center bg-slate-950 rounded-md p-1 border border-slate-800">
+                            {['lines', 'words', 'chars'].map((mode) => (
+                                <button
+                                    key={mode}
+                                    onClick={() => setDiffMode(mode)}
+                                    className={`px-3 py-1 text-xs font-medium rounded capitalize transition-all ${diffMode === mode
+                                        ? 'bg-slate-800 text-indigo-300 shadow-sm border border-slate-700'
+                                        : 'text-slate-500 hover:text-slate-300'
+                                        }`}
+                                >
+                                    {mode}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none px-2 hover:text-indigo-300 transition-colors" title="Ignore leading/trailing whitespace">
+                            <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${ignoreWhitespace ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 bg-slate-800'}`}>
+                                {ignoreWhitespace && <Check size={10} className="text-white" />}
+                            </div>
+                            <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={ignoreWhitespace}
+                                onChange={(e) => setIgnoreWhitespace(e.target.checked)}
+                            />
+                            Trim Space
+                        </label>
+
+                        <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none px-2 hover:text-indigo-300 transition-colors" title="Ignore blank lines">
+                            <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${ignoreBlankLines ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 bg-slate-800'}`}>
+                                {ignoreBlankLines && <Check size={10} className="text-white" />}
+                            </div>
+                            <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={ignoreBlankLines}
+                                onChange={(e) => setIgnoreBlankLines(e.target.checked)}
+                            />
+                            No Blanks
+                        </label>
+
+                        <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none px-2 hover:text-indigo-300 transition-colors" title="ignore comments">
+                            <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${ignoreComments ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 bg-slate-800'}`}>
+                                {ignoreComments && <Check size={10} className="text-white" />}
+                            </div>
+                            <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={ignoreComments}
+                                onChange={(e) => setIgnoreComments(e.target.checked)}
+                            />
+                            No Comments
+                        </label>
+
+                        <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
+
+                        <Button onClick={onPrettify} title="Format JSON" size="sm" disabled={!hasContent}>
+                            <AlignLeft size={16} className="mr-1.5" />
+                            Format
+                        </Button>
+                        <Button onClick={onSort} title="Sort keys alphabetically" size="sm" disabled={!hasContent}>
+                            <SortAsc size={16} className="mr-1.5" />
+                            Sort
+                        </Button>
+
+                        <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
+
+                        <Button
+                            onClick={onToggleEdit}
+                            variant={isEditing ? 'primary' : 'secondary'}
+                            size="sm"
+                            className="min-w-[100px]"
+                        >
+                            <ArrowLeftRight size={16} className="mr-1.5" />
+                            {isEditing ? 'Compare' : 'Edit Inputs'}
+                        </Button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- COMPONENTS: DIFF VIEW ---
+        const LineContent = ({ line, mate, mode, type }) => {
+            const lineType = type || line.type;
+            if (lineType === 'phantom') return <span className="select-none">&nbsp;</span>;
+
+            if (mode !== 'lines' && mate && mate.type !== 'phantom' && lineType !== 'unchanged' && mate.type !== 'unchanged') {
+                const changes = getIntraLineDiff(
+                    lineType === 'removed' ? line.value : mate.value,
+                    lineType === 'added' ? line.value : mate.value,
+                    mode
+                );
+
+                if (changes) {
+                    return (
+                        <span>
+                            {changes.map((part, idx) => {
+                                if (lineType === 'removed') {
+                                    if (part.added) return null;
+                                    return <span key={idx} className={part.removed ? "bg-red-500/30 text-red-100 rounded-[1px]" : ""}>{part.value}</span>
+                                }
+                                else {
+                                    if (part.removed) return null;
+                                    return <span key={idx} className={part.added ? "bg-green-500/30 text-green-100 rounded-[1px]" : ""}>{part.value}</span>
+                                }
+                            })}
+                        </span>
+                    );
+                }
+            }
+
+            return <span className={lineType === 'unchanged' ? 'text-slate-300' : ''}>{line.value || ' '}</span>;
+        };
+
+        const DiffView = ({ comparison, loading }) => {
+            const [viewType, setViewType] = useState('split');
+            const [showLineNumbers, setShowLineNumbers] = useState(true);
+
+            if (loading) {
+                return (
+                    <div className="flex h-full items-center justify-center text-slate-500">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mr-2"></div>
+                        Processing...
+                    </div>
+                );
+            }
+
+            if (comparison.leftLines.length === 0 && comparison.rightLines.length === 0) {
+                return (
+                    <div className="flex h-full flex-col items-center justify-center text-slate-500 bg-slate-900/50">
+                        <AlertCircle className="w-12 h-12 mb-2 opacity-20" />
+                        <p>No content to compare.</p>
+                    </div>
+                )
+            }
+
+            const getBgColor = (type, mode) => {
+                if (type === 'removed') {
+                    return 'bg-diff-del text-diff-delText';
+                }
+                if (type === 'added') {
+                    return 'bg-diff-add text-diff-addText';
+                }
+                return 'text-slate-300';
+            };
+
+            const renderSplitView = () => (
+                comparison.leftLines.map((leftLine, index) => {
+                    const rightLine = comparison.rightLines[index];
+                    const leftBg = getBgColor(leftLine.type, comparison.diffMode);
+                    const rightBg = getBgColor(rightLine.type, comparison.diffMode);
+
+                    return (
+                        <div key={index} className="flex border-b border-slate-800 hover:bg-slate-800/50 font-mono text-xs sm:text-sm">
+                            {showLineNumbers && (
+                                <div className="w-8 sm:w-12 shrink-0 select-none bg-slate-900 border-r border-slate-800 text-right pr-2 py-0.5 text-slate-600">
+                                    {leftLine.lineNumber || ''}
+                                </div>
+                            )}
+                            <div className={`flex-1 overflow-x-auto whitespace-pre py-0.5 px-2 ${leftBg}`}>
+                                <LineContent line={leftLine} mate={rightLine} mode={comparison.diffMode} />
+                            </div>
+
+                            {showLineNumbers && (
+                                <div className="w-8 sm:w-12 shrink-0 select-none bg-slate-900 border-l border-r border-slate-800 text-right pr-2 py-0.5 text-slate-600">
+                                    {rightLine.lineNumber || ''}
+                                </div>
+                            )}
+                            <div className={`flex-1 overflow-x-auto whitespace-pre py-0.5 px-2 ${rightBg}`}>
+                                <LineContent line={rightLine} mate={leftLine} mode={comparison.diffMode} />
+                            </div>
+                        </div>
+                    );
+                })
+            );
+
+            const renderUnifiedView = () => (
+                comparison.unifiedLines.map((line, index) => {
+                    const bg = getBgColor(line.type, comparison.diffMode);
+
+                    return (
+                        <div key={index} className={`flex border-b border-slate-800 font-mono text-xs sm:text-sm ${bg}`}>
+                            {showLineNumbers && (
+                                <>
+                                    <div className="w-8 sm:w-10 shrink-0 select-none text-right pr-2 py-0.5 text-slate-600 border-r border-slate-800/50 bg-slate-900">
+                                        {line.type !== 'added' ? line.oldLineNumber : ''}
+                                    </div>
+                                    <div className="w-8 sm:w-10 shrink-0 select-none text-right pr-2 py-0.5 text-slate-600 border-r border-slate-800/50 bg-slate-900">
+                                        {line.type !== 'removed' ? line.newLineNumber : ''}
+                                    </div>
+                                </>
+                            )}
+                            <div className="w-6 shrink-0 select-none text-center py-0.5 text-slate-500 opacity-50">
+                                {line.type === 'added' && '+'}
+                                {line.type === 'removed' && '-'}
+                            </div>
+                            <div className="flex-1 overflow-x-auto whitespace-pre py-0.5 px-2">
+                                {line.value || ' '}
+                            </div>
+                        </div>
+                    )
+                })
+            );
+
+            return (
+                <div className="flex flex-col h-full bg-slate-900 shadow-sm overflow-hidden border-t border-slate-800">
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
+                        <div className="flex bg-slate-950 rounded-lg border border-slate-800 p-0.5">
+                            <button
+                                onClick={() => setViewType('split')}
+                                className={clsx(
+                                    "flex items-center px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                                    viewType === 'split' ? "bg-slate-800 text-indigo-300 shadow-sm border border-slate-700" : "text-slate-500 hover:text-slate-300"
+                                )}
+                            >
+                                <Columns size={14} className="mr-1.5" />
+                                Split
+                            </button>
+                            <button
+                                onClick={() => setViewType('unified')}
+                                className={clsx(
+                                    "flex items-center px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                                    viewType === 'unified' ? "bg-slate-800 text-indigo-300 shadow-sm border border-slate-700" : "text-slate-500 hover:text-slate-300"
+                                )}
+                            >
+                                <LayoutList size={14} className="mr-1.5" />
+                                Unified
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => setShowLineNumbers(!showLineNumbers)}
+                            className={clsx(
+                                "flex items-center px-2 py-1 text-xs font-medium rounded border transition-colors",
+                                showLineNumbers ? "bg-slate-800 border-indigo-900/50 text-indigo-300" : "bg-slate-900 border-slate-700 text-slate-500 hover:bg-slate-800"
+                            )}
+                            title="Toggle Line Numbers"
+                        >
+                            {showLineNumbers ? <ListOrdered size={14} className="mr-1" /> : <Hash size={14} className="mr-1" />}
+                            Line Nums
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-auto custom-scrollbar bg-slate-900">
+                        <div className="min-w-[600px]">
+                            {viewType === 'split' ? renderSplitView() : renderUnifiedView()}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- COMPONENTS: SETTINGS MODAL ---
+        const SettingsModal = ({ isOpen, onClose, settings, setSettings, defaultSettings }) => {
+            if (!isOpen) return null;
+
+            const updateColor = (key, value) => {
+                setSettings(s => ({ ...s, colors: { ...s.colors, [key]: value } }));
+            };
+
+            const updateEditor = (key, value) => {
+                setSettings(s => ({ ...s, editor: { ...s.editor, [key]: value } }));
+            };
+
+            const updateDiff = (key, value) => {
+                setSettings(s => ({ ...s, diff: { ...s.diff, [key]: value } }));
+            };
+
+            const resetToDefaults = () => setSettings(defaultSettings);
+
+            const ColorInput = ({ label, colorKey }) => (
+                <div className="flex items-center justify-between py-2">
+                    <span className="text-slate-300 text-sm">{label}</span>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="color"
+                            value={settings.colors[colorKey]}
+                            onChange={(e) => updateColor(colorKey, e.target.value)}
+                            className="w-8 h-8 rounded cursor-pointer border border-slate-600"
+                        />
+                        <input
+                            type="text"
+                            value={settings.colors[colorKey]}
+                            onChange={(e) => updateColor(colorKey, e.target.value)}
+                            className="w-20 px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded text-slate-200 font-mono"
+                        />
+                    </div>
+                </div>
+            );
+
+            const Toggle = ({ label, checked, onChange }) => (
+                <div className="flex items-center justify-between py-2">
+                    <span className="text-slate-300 text-sm">{label}</span>
+                    <button
+                        onClick={() => onChange(!checked)}
+                        className={`w-11 h-6 rounded-full transition-colors ${checked ? 'bg-indigo-500' : 'bg-slate-600'}`}
+                    >
+                        <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                </div>
+            );
+
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+                    <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden border border-slate-700" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
+                            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+                                <Settings size={20} /> Settings
+                            </h2>
+                            <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto max-h-[60vh] px-5 py-4 space-y-6">
+                            {/* Syntax Colors */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide mb-3">Syntax Highlighting Colors</h3>
+                                <div className="space-y-1 bg-slate-900/50 rounded-lg p-3">
+                                    <ColorInput label="Tag Brackets" colorKey="tagBracket" />
+                                    <ColorInput label="Tag Names" colorKey="tagName" />
+                                    <ColorInput label="Attribute Names" colorKey="attrName" />
+                                    <ColorInput label="Attribute Values" colorKey="attrValue" />
+                                    <ColorInput label="Comments" colorKey="comment" />
+                                    <ColorInput label="Text Content" colorKey="text" />
+                                </div>
+                            </div>
+
+                            {/* Editor Settings */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide mb-3">Editor Settings</h3>
+                                <div className="space-y-1 bg-slate-900/50 rounded-lg p-3">
+                                    <div className="flex items-center justify-between py-2">
+                                        <span className="text-slate-300 text-sm">Font Size</span>
+                                        <select
+                                            value={settings.editor.fontSize}
+                                            onChange={(e) => updateEditor('fontSize', e.target.value)}
+                                            className="bg-slate-700 border border-slate-600 rounded px-3 py-1 text-sm text-slate-200"
+                                        >
+                                            <option value="xs">Extra Small</option>
+                                            <option value="sm">Small</option>
+                                            <option value="base">Medium</option>
+                                            <option value="lg">Large</option>
+                                        </select>
+                                    </div>
+                                    <Toggle label="Word Wrap" checked={settings.editor.wordWrap} onChange={(v) => updateEditor('wordWrap', v)} />
+                                    <Toggle label="Auto-format on Paste" checked={settings.editor.autoFormat} onChange={(v) => updateEditor('autoFormat', v)} />
+                                </div>
+                            </div>
+
+                            {/* Diff Settings */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide mb-3">Diff Settings</h3>
+                                <div className="space-y-1 bg-slate-900/50 rounded-lg p-3">
+                                    <Toggle label="Show Line Numbers" checked={settings.diff.showLineNumbers} onChange={(v) => updateDiff('showLineNumbers', v)} />
+                                    <div className="flex items-center justify-between py-2">
+                                        <span className="text-slate-300 text-sm">Context Lines</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="20"
+                                            value={settings.diff.contextLines}
+                                            onChange={(e) => updateDiff('contextLines', parseInt(e.target.value) || 0)}
+                                            className="w-16 bg-slate-700 border border-slate-600 rounded px-3 py-1 text-sm text-slate-200 text-center"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between px-5 py-4 border-t border-slate-700 bg-slate-800/50">
+                            <button
+                                onClick={resetToDefaults}
+                                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors"
+                            >
+                                <RotateCcw size={16} /> Reset to Defaults
+                            </button>
+                            <button
+                                onClick={onClose}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP COMPONENT ---
+        const App = () => {
+            const [leftContent, setLeftContent] = useState('');
+            const [rightContent, setRightContent] = useState('');
+
+            const [leftError, setLeftError] = useState(null);
+            const [rightError, setRightError] = useState(null);
+
+            const [diffMode, setDiffMode] = useState('lines');
+            const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
+            const [ignoreBlankLines, setIgnoreBlankLines] = useState(false);
+            const [ignoreComments, setIgnoreComments] = useState(false);
+
+            const [comparison, setComparison] = useState({
+                leftLines: [],
+                rightLines: [],
+                unifiedLines: [],
+                diffMode: 'lines'
+            });
+
+            const [viewState, setViewState] = useState('EDIT');
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+
+            // JSON SCHEMA validation state
+            const [jsonSchema, setjsonSchema] = useState('');
+            const [leftSchemaErrors, setLeftSchemaErrors] = useState([]);
+            const [rightSchemaErrors, setRightSchemaErrors] = useState([]);
+            const [showSchemaPanel, setShowSchemaPanel] = useState(false);
+
+            // Default settings
+            const defaultSettings = {
+                colors: {
+                    tagBracket: '#818cf8',
+                    tagName: '#f472b6',
+                    attrName: '#67e8f9',
+                    attrValue: '#a3e635',
+                    comment: '#6b7280',
+                    text: '#e2e8f0'
+                },
+                editor: {
+                    fontSize: 'sm',
+                    wordWrap: true,
+                    autoFormat: true
+                },
+                diff: {
+                    showLineNumbers: true,
+                    contextLines: 3
+                }
+            };
+
+            const [settings, setSettings] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('jsondiff-settings');
+                    return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+                } catch { return defaultSettings; }
+            });
+
+            useEffect(() => {
+                try { localStorage.setItem('jsondiff-settings', JSON.stringify(settings)); } catch { }
+            }, [settings]);
+
+            useEffect(() => {
+                const t = setTimeout(() => setLeftError(validateJSON(leftContent)), 500);
+                return () => clearTimeout(t);
+            }, [leftContent]);
+
+            useEffect(() => {
+                const t = setTimeout(() => setRightError(validateJSON(rightContent)), 500);
+                return () => clearTimeout(t);
+            }, [rightContent]);
+
+            // Schema validation effects
+            useEffect(() => {
+                if (jsonSchema && leftContent) {
+                    const result = validateAgainstSchema(leftContent, jsonSchema);
+                    setLeftSchemaErrors(result.errors);
+                } else {
+                    setLeftSchemaErrors([]);
+                }
+            }, [leftContent, jsonSchema]);
+
+            useEffect(() => {
+                if (jsonSchema && rightContent) {
+                    const result = validateAgainstSchema(rightContent, jsonSchema);
+                    setRightSchemaErrors(result.errors);
+                } else {
+                    setRightSchemaErrors([]);
+                }
+            }, [rightContent, jsonSchema]);
+
+            const handleContentChange = (side, text) => {
+                let finalVal = text;
+                if (isMinified(text)) {
+                    const formatted = formatJSON(text);
+                    if (formatted !== text) {
+                        finalVal = formatted;
+                    }
+                }
+
+                if (side === 'left') setLeftContent(finalVal);
+                else setRightContent(finalVal);
+            };
+
+            const handleUpload = (side, file) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const text = e.target?.result;
+                    if (text) handleContentChange(side, text);
+                };
+                reader.readAsText(file);
+            };
+
+            const executeDiff = useCallback(() => {
+                setIsProcessing(true);
+                setTimeout(() => {
+                    const result = computeDiff(
+                        leftContent,
+                        rightContent,
+                        diffMode,
+                        ignoreWhitespace,
+                        ignoreBlankLines,
+                        ignoreComments
+                    );
+                    setComparison(result);
+                    setIsProcessing(false);
+                }, 10);
+            }, [leftContent, rightContent, diffMode, ignoreWhitespace, ignoreBlankLines, ignoreComments]);
+
+            useEffect(() => {
+                if (viewState === 'DIFF') {
+                    executeDiff();
+                }
+            }, [diffMode, ignoreWhitespace, ignoreBlankLines, ignoreComments, viewState, executeDiff]);
+
+            const handleToggleView = () => {
+                if (viewState === 'EDIT') {
+                    setViewState('DIFF');
+                } else {
+                    setViewState('EDIT');
+                }
+            };
+
+            const handleSort = () => {
+                try {
+                    if (leftContent) setLeftContent(sortJSON(leftContent));
+                    if (rightContent) setRightContent(sortJSON(rightContent));
+                } catch (e) {
+                    alert("Could not sort JSON. Please ensure it is valid.");
+                }
+            };
+
+            const handlePrettify = () => {
+                if (leftContent) setLeftContent(formatJSON(leftContent));
+                if (rightContent) setRightContent(formatJSON(rightContent));
+            };
+
+            const hasContent = !!(leftContent || rightContent);
+
+            return (
+                <div className="flex flex-col h-screen bg-slate-950">
+                    <div className="flex items-center justify-between border-b border-slate-800">
+                        <Toolbar
+                            diffMode={diffMode}
+                            setDiffMode={setDiffMode}
+                            ignoreWhitespace={ignoreWhitespace}
+                            setIgnoreWhitespace={setIgnoreWhitespace}
+                            ignoreBlankLines={ignoreBlankLines}
+                            setIgnoreBlankLines={setIgnoreBlankLines}
+                            ignoreComments={ignoreComments}
+                            setIgnoreComments={setIgnoreComments}
+                            onSort={handleSort}
+                            onPrettify={handlePrettify}
+                            isEditing={viewState === 'EDIT'}
+                            onToggleEdit={handleToggleView}
+                            hasContent={hasContent}
+                        />
+                        <div className="flex items-center gap-1 mr-2">
+                            <input
+                                type="file"
+                                id="schema-file-input"
+                                accept=".json,.schema.json"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (ev) => setjsonSchema(ev.target.result);
+                                        reader.readAsText(file);
+                                    }
+                                    e.target.value = '';
+                                }}
+                            />
+                            <button
+                                onClick={() => document.getElementById('schema-file-input').click()}
+                                className={`p-2 rounded-lg transition-colors ${jsonSchema ? 'text-green-400 bg-green-900/30' : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-800'}`}
+                                title={jsonSchema ? "JSON SCHEMA loaded (click to change)" : "Load JSON SCHEMA for validation"}
+                            >
+                                <FileCode size={20} />
+                            </button>
+                            {jsonSchema && (
+                                <button
+                                    onClick={() => setjsonSchema('')}
+                                    className="p-1 text-slate-500 hover:text-red-400 rounded transition-colors"
+                                    title="Clear JSON SCHEMA"
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setShowSettings(true)}
+                            className="mr-4 p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors"
+                            title="Settings"
+                        >
+                            <Settings size={20} />
+                        </button>
+                    </div>
+
+                    <SettingsModal
+                        isOpen={showSettings}
+                        onClose={() => setShowSettings(false)}
+                        settings={settings}
+                        setSettings={setSettings}
+                        defaultSettings={defaultSettings}
+                    />
+
+                    <div className="flex-1 overflow-hidden relative">
+                        {viewState === 'EDIT' && (
+                            <div className="absolute inset-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                                <JsonEditor
+                                    label="Original / Left"
+                                    value={leftContent}
+                                    onChange={(val) => handleContentChange('left', val)}
+                                    error={leftError}
+                                    onUpload={(f) => handleUpload('left', f)}
+                                    onClear={() => setLeftContent('')}
+                                    settings={settings}
+                                    schemaErrors={leftSchemaErrors}
+                                    onFormat={formatJSON}
+                                />
+                                <JsonEditor
+                                    label="Modified / Right"
+                                    value={rightContent}
+                                    onChange={(val) => handleContentChange('right', val)}
+                                    error={rightError}
+                                    onUpload={(f) => handleUpload('right', f)}
+                                    onClear={() => setRightContent('')}
+                                    settings={settings}
+                                    schemaErrors={rightSchemaErrors}
+                                    onFormat={formatJSON}
+                                />
+                            </div>
+                        )}
+
+                        {viewState === 'DIFF' && (
+                            <DiffView comparison={comparison} loading={isProcessing} />
+                        )}
+                    </div>
+
+                    {viewState === 'EDIT' && !hasContent && (
+                        <div className="absolute bottom-6 left-0 right-0 text-center pointer-events-none">
+                            <span className="bg-slate-800/90 backdrop-blur px-4 py-2 rounded-full text-slate-400 text-sm shadow-lg border border-slate-700">
+                                Paste JSON content or drag & drop files to start
+                            </span>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- MOUNT ---
+        const rootElement = document.getElementById('root');
+        const root = createRoot(rootElement);
+        root.render(<App />);
+
+    </script>
+</body>
+
+</html>
