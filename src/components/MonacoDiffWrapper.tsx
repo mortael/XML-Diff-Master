@@ -8,7 +8,7 @@ initMonaco();
 interface MonacoDiffWrapperProps {
     original: string;
     modified: string;
-    language: 'xml' | 'json';
+    language: 'xml' | 'json' | 'text';
     settings: Settings;
     diffMode: 'lines' | 'words' | 'chars';
     ignoreWhitespace: boolean;
@@ -35,7 +35,7 @@ export const MonacoDiffWrapper = ({
                     height="100%"
                     original={original}
                     modified={modified}
-                    language={language}
+                    language={language === 'text' ? 'plaintext' : language}
                     theme="vs-dark"
                     onMount={handleEditorDidMount}
                     options={{
