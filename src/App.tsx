@@ -7,6 +7,7 @@ import { DiffView } from './components/DiffView';
 import { SettingsModal } from './components/SettingsModal';
 import { validateXML, formatXML, sortXML, validateAgainstSchema, Settings } from './utils/xml';
 import { validateJSON, formatJSON, sortJSON } from './utils/json';
+import { validateText, formatText, sortText } from './utils/text';
 import { computeDiff, ComparisonResult } from './utils/diff';
 import { MonacoEditorWrapper } from './components/MonacoEditorWrapper';
 import { MonacoDiffWrapper } from './components/MonacoDiffWrapper';
@@ -22,8 +23,8 @@ function App() {
     const [useMonaco, setUseMonaco] = useState(true);
     const [useLibxml, setUseLibxml] = useState(false);
 
-    const [leftMode, setLeftMode] = useState<'xml' | 'json'>('xml');
-    const [rightMode, setRightMode] = useState<'xml' | 'json'>('xml');
+    const [leftMode, setLeftMode] = useState<'xml' | 'json' | 'text'>('xml');
+    const [rightMode, setRightMode] = useState<'xml' | 'json' | 'text'>('xml');
 
     const leftTypingRef = useRef(false);
     const leftTimeoutRef = useRef<number | null>(null);
@@ -115,7 +116,8 @@ function App() {
     useEffect(() => {
         const t = setTimeout(() => {
             if (leftMode === 'xml') setLeftError(validateXML(leftContent.state));
-            else setLeftError(validateJSON(leftContent.state));
+            else if (leftMode === 'json') setLeftError(validateJSON(leftContent.state));
+            else setLeftError(validateText(leftContent.state));
         }, 500);
         return () => clearTimeout(t);
     }, [leftContent.state, leftMode]);
@@ -123,7 +125,8 @@ function App() {
     useEffect(() => {
         const t = setTimeout(() => {
             if (rightMode === 'xml') setRightError(validateXML(rightContent.state));
-            else setRightError(validateJSON(rightContent.state));
+            else if (rightMode === 'json') setRightError(validateJSON(rightContent.state));
+            else setRightError(validateText(rightContent.state));
         }, 500);
         return () => clearTimeout(t);
     }, [rightContent.state, rightMode]);
@@ -192,13 +195,16 @@ function App() {
             // Detect type immediately
             const trimmed = text.trim();
             const isJson = trimmed.startsWith('{') || trimmed.startsWith('[');
-            const mode = isJson ? 'json' : 'xml';
+            const isXml = trimmed.startsWith('<');
+            const mode = isJson ? 'json' : isXml ? 'xml' : 'text';
 
             if (side === 'left') setLeftMode(mode);
             else setRightMode(mode);
 
             if (settings?.editor?.autoFormat === 'always') {
-                text = isJson ? formatJSON(text) : formatXML(text, settings);
+                if (mode === 'json') text = formatJSON(text);
+                else if (mode === 'xml') text = formatXML(text, settings);
+                else text = formatText(text);
             }
 
             // We manually call the update logic here to bypass normal typing debounce
@@ -219,11 +225,13 @@ function App() {
         const mode = side === 'left' ? leftMode : rightMode;
         if (!content) return;
         const name = side === 'left' ? leftFileName : rightFileName;
-        const blob = new Blob([content], { type: mode === 'json' ? 'application/json' : 'text/xml' });
+        const mimeType = mode === 'json' ? 'application/json' : mode === 'xml' ? 'text/xml' : 'text/plain';
+        const defaultName = mode === 'json' ? 'untitled.json' : mode === 'xml' ? 'untitled.xml' : 'untitled.txt';
+        const blob = new Blob([content], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = name || (mode === 'json' ? 'untitled.json' : 'untitled.xml');
+        a.download = name || defaultName;
         a.click();
         URL.revokeObjectURL(url);
     };
@@ -245,12 +253,14 @@ function App() {
                 try {
                     // Try to sort if it looks like JSON or XML
                     if (leftMode === 'json') oldText = sortJSON(oldText);
-                    else oldText = sortXML(oldText, settings);
+                    else if (leftMode === 'xml') oldText = sortXML(oldText, settings);
+                    else oldText = sortText(oldText);
                 } catch (e) { /* Ignore sort errors, best effort */ }
 
                 try {
                     if (rightMode === 'json') newText = sortJSON(newText);
-                    else newText = sortXML(newText, settings);
+                    else if (rightMode === 'xml') newText = sortXML(newText, settings);
+                    else newText = sortText(newText);
                 } catch (e) { /* Ignore sort errors */ }
             }
 
@@ -285,10 +295,16 @@ function App() {
         const s = (typeof side === 'string' ? side : 'both');
         try {
             if ((s === 'left' || s === 'both') && leftContent.state) {
-                leftContent.setWithHistory(leftMode === 'json' ? sortJSON(leftContent.state) : sortXML(leftContent.state, settings));
+                const sorted = leftMode === 'json' ? sortJSON(leftContent.state) : 
+                              leftMode === 'xml' ? sortXML(leftContent.state, settings) : 
+                              sortText(leftContent.state);
+                leftContent.setWithHistory(sorted);
             }
             if ((s === 'right' || s === 'both') && rightContent.state) {
-                rightContent.setWithHistory(rightMode === 'json' ? sortJSON(rightContent.state) : sortXML(rightContent.state, settings));
+                const sorted = rightMode === 'json' ? sortJSON(rightContent.state) : 
+                              rightMode === 'xml' ? sortXML(rightContent.state, settings) : 
+                              sortText(rightContent.state);
+                rightContent.setWithHistory(sorted);
             }
         } catch (e) {
             alert("Could not sort content. Please ensure it is valid.");
@@ -298,10 +314,16 @@ function App() {
     const handlePrettify = (side?: 'left' | 'right' | 'both') => {
         const s = (typeof side === 'string' ? side : 'both');
         if ((s === 'left' || s === 'both') && leftContent.state) {
-            leftContent.setWithHistory(leftMode === 'json' ? formatJSON(leftContent.state) : formatXML(leftContent.state, settings));
+            const formatted = leftMode === 'json' ? formatJSON(leftContent.state) : 
+                            leftMode === 'xml' ? formatXML(leftContent.state, settings) : 
+                            formatText(leftContent.state);
+            leftContent.setWithHistory(formatted);
         }
         if ((s === 'right' || s === 'both') && rightContent.state) {
-            rightContent.setWithHistory(rightMode === 'json' ? formatJSON(rightContent.state) : formatXML(rightContent.state, settings));
+            const formatted = rightMode === 'json' ? formatJSON(rightContent.state) : 
+                            rightMode === 'xml' ? formatXML(rightContent.state, settings) : 
+                            formatText(rightContent.state);
+            rightContent.setWithHistory(formatted);
         }
     };
 
@@ -452,13 +474,14 @@ function App() {
                                                 const t = val.trim();
                                                 if (t.startsWith('{') || t.startsWith('[')) setLeftMode('json');
                                                 else if (t.startsWith('<')) setLeftMode('xml');
+                                                else if (t) setLeftMode('text');
                                             }
                                             leftContent.setState(val);
                                         }}
                                         settings={settings}
                                         error={leftError}
                                         onUpload={(f) => handleUpload('left', f)}
-                                        onClear={() => { leftContent.setWithHistory(''); setLeftFileName('untitled.' + (leftMode === 'json' ? 'json' : 'xml')); }}
+                                        onClear={() => { leftContent.setWithHistory(''); setLeftFileName('untitled.' + (leftMode === 'json' ? 'json' : leftMode === 'xml' ? 'xml' : 'txt')); }}
                                         onSave={() => handleSave('left')}
                                         onToggleWordWrap={() => setSettings(s => ({ ...s, editor: { ...s.editor, wordWrap: !s.editor.wordWrap } }))}
                                         onFileNameChange={setLeftFileName}
@@ -474,16 +497,17 @@ function App() {
                                                 const t = val.trim();
                                                 if (t.startsWith('{') || t.startsWith('[')) setLeftMode('json');
                                                 else if (t.startsWith('<')) setLeftMode('xml');
+                                                else if (t) setLeftMode('text');
                                             }
                                             handleLeftChange(val);
                                         }}
                                         error={leftError}
                                         onUpload={(f) => handleUpload('left', f)}
-                                        onClear={() => { leftContent.setWithHistory(''); setLeftFileName('untitled.' + (leftMode === 'json' ? 'json' : 'xml')); }}
+                                        onClear={() => { leftContent.setWithHistory(''); setLeftFileName('untitled.' + (leftMode === 'json' ? 'json' : leftMode === 'xml' ? 'xml' : 'txt')); }}
                                         settings={settings}
                                         onToggleWordWrap={() => setSettings(s => ({ ...s, editor: { ...s.editor, wordWrap: !s.editor.wordWrap } }))}
                                         schemaErrors={leftSchemaErrors}
-                                        onFormat={(xml) => leftMode === 'json' ? formatJSON(xml) : formatXML(xml, settings)}
+                                        onFormat={(xml) => leftMode === 'json' ? formatJSON(xml) : leftMode === 'xml' ? formatXML(xml, settings) : formatText(xml)}
                                         onSave={() => handleSave('left')}
                                         onFileNameChange={setLeftFileName}
                                         onUndo={leftContent.undo}
@@ -503,13 +527,14 @@ function App() {
                                                 const t = val.trim();
                                                 if (t.startsWith('{') || t.startsWith('[')) setRightMode('json');
                                                 else if (t.startsWith('<')) setRightMode('xml');
+                                                else if (t) setRightMode('text');
                                             }
                                             rightContent.setState(val);
                                         }}
                                         settings={settings}
                                         error={rightError}
                                         onUpload={(f) => handleUpload('right', f)}
-                                        onClear={() => { rightContent.setWithHistory(''); setRightFileName('untitled.' + (rightMode === 'json' ? 'json' : 'xml')); }}
+                                        onClear={() => { rightContent.setWithHistory(''); setRightFileName('untitled.' + (rightMode === 'json' ? 'json' : rightMode === 'xml' ? 'xml' : 'txt')); }}
                                         onSave={() => handleSave('right')}
                                         onToggleWordWrap={() => setSettings(s => ({ ...s, editor: { ...s.editor, wordWrap: !s.editor.wordWrap } }))}
                                         onFileNameChange={setRightFileName}
@@ -524,16 +549,17 @@ function App() {
                                                 const t = val.trim();
                                                 if (t.startsWith('{') || t.startsWith('[')) setRightMode('json');
                                                 else if (t.startsWith('<')) setRightMode('xml');
+                                                else if (t) setRightMode('text');
                                             }
                                             handleRightChange(val);
                                         }}
                                         error={rightError}
                                         onUpload={(f) => handleUpload('right', f)}
-                                        onClear={() => { rightContent.setWithHistory(''); setRightFileName('untitled.' + (rightMode === 'json' ? 'json' : 'xml')); }}
+                                        onClear={() => { rightContent.setWithHistory(''); setRightFileName('untitled.' + (rightMode === 'json' ? 'json' : rightMode === 'xml' ? 'xml' : 'txt')); }}
                                         settings={settings}
                                         onToggleWordWrap={() => setSettings(s => ({ ...s, editor: { ...s.editor, wordWrap: !s.editor.wordWrap } }))}
                                         schemaErrors={rightSchemaErrors}
-                                        onFormat={(xml) => rightMode === 'json' ? formatJSON(xml) : formatXML(xml, settings)}
+                                        onFormat={(xml) => rightMode === 'json' ? formatJSON(xml) : rightMode === 'xml' ? formatXML(xml, settings) : formatText(xml)}
                                         onSave={() => handleSave('right')}
                                         onFileNameChange={setRightFileName}
                                         onUndo={rightContent.undo}
@@ -550,7 +576,9 @@ function App() {
                                     // Apply semantic sort if enabled
                                     if (semanticDiff) {
                                         try {
-                                            return leftMode === 'json' ? sortJSON(leftContent.state) : sortXML(leftContent.state, settings);
+                                            return leftMode === 'json' ? sortJSON(leftContent.state) : 
+                                                   leftMode === 'xml' ? sortXML(leftContent.state, settings) : 
+                                                   sortText(leftContent.state);
                                         } catch { return leftContent.state; }
                                     }
                                     return leftContent.state;
@@ -559,7 +587,9 @@ function App() {
                                     // Apply semantic sort if enabled
                                     if (semanticDiff) {
                                         try {
-                                            return rightMode === 'json' ? sortJSON(rightContent.state) : sortXML(rightContent.state, settings);
+                                            return rightMode === 'json' ? sortJSON(rightContent.state) : 
+                                                   rightMode === 'xml' ? sortXML(rightContent.state, settings) : 
+                                                   sortText(rightContent.state);
                                         } catch { return rightContent.state; }
                                     }
                                     return rightContent.state;

@@ -12,7 +12,7 @@ interface MonacoEditorWrapperProps {
     value: string;
     onChange: (value: string) => void;
     label: string;
-    language: 'xml' | 'json';
+    language: 'xml' | 'json' | 'text';
     settings: Settings;
     error: { line: number; message: string } | null;
     onUpload: (file: File) => void;
@@ -203,8 +203,8 @@ export const MonacoEditorWrapper = ({
                 )}
                 <Editor
                     height="100%"
-                    defaultLanguage={language}
-                    language={language}
+                    defaultLanguage={language === 'text' ? 'plaintext' : language}
+                    language={language === 'text' ? 'plaintext' : language}
                     value={value}
                     theme="vs-dark"
                     onChange={(val: string | undefined) => onChange(val || '')}

@@ -16,6 +16,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { highlightJSON } from "../utils/json";
 import { highlightXML, type Settings } from "../utils/xml";
+import { highlightText } from "../utils/text";
 import { TreeView } from "./TreeView";
 
 interface XmlEditorProps {
@@ -33,7 +34,7 @@ interface XmlEditorProps {
   onFileNameChange: (name: string) => void;
   onUndo: () => void;
   onRedo: () => void;
-  mode: "xml" | "json";
+  mode: "xml" | "json" | "text";
 }
 
 export const XmlEditor = ({
@@ -495,7 +496,9 @@ export const XmlEditor = ({
                   __html:
                     (mode === "json"
                       ? highlightJSON(value, settings?.colors)
-                      : highlightXML(value, settings?.colors)) + "\n",
+                      : mode === "xml"
+                      ? highlightXML(value, settings?.colors)
+                      : highlightText(value, settings?.colors)) + "\n",
                 }}
                 ref={preRef}
                 style={{ color: "#e2e8f0", lineHeight: "1.5" }}
