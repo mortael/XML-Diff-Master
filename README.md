@@ -52,5 +52,28 @@ To use without an internet connection:
 4. **Compare**: Switch to "Diff" view (top right) to see the changes.
 5. **Save**: Click the Download icon to save your changes back to disk.
 
+## 🚀 GitHub Pages Deployment
+
+This project includes a GitHub Actions workflow that automatically builds and deploys the application to GitHub Pages.
+
+### Enabling GitHub Pages
+
+To enable GitHub Pages for your repository:
+
+1. Go to your repository **Settings**
+2. Navigate to **Pages** in the left sidebar
+3. Under **Build and deployment**:
+   - Set **Source** to "GitHub Actions"
+4. The workflow will automatically trigger on:
+   - Every push to the `main` branch
+   - Manual trigger via the Actions tab (workflow_dispatch)
+
+Once enabled, your site will be available at: `https://<username>.github.io/<repository-name>/`
+
+The workflow:
+- Installs Node.js dependencies
+- Builds the project using `npm run build`
+- Deploys the contents of the `dist` folder to GitHub Pages
+
 ## 📄 License
 MIT
