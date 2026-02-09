@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shiporder orderid="889923">
+  <!-- Missing orderperson element (Required) -->
+  <shipto>
+    <name>Ola Nordmann</name>
+    <address>Langgt 23</address>
+    <!-- Missing city element (Required) -->
+    <country>Norway</country>
+  </shipto>
+  <item>
+    <title>Empire Burlesque</title>
+    <note>Special Edition</note>
+    <quantity>1</quantity>
+    <!-- Missing price element (Required) -->
+  </item>
+</shiporder>

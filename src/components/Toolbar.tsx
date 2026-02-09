@@ -11,6 +11,8 @@ interface ToolbarProps {
     setIgnoreBlankLines: (ignore: boolean) => void;
     ignoreComments: boolean;
     setIgnoreComments: (ignore: boolean) => void;
+    semanticDiff: boolean;
+    setSemanticDiff: (active: boolean) => void;
     onSort: (side?: 'left' | 'right' | 'both') => void;
     onPrettify: (side?: 'left' | 'right' | 'both') => void;
     isEditing: boolean;
@@ -27,6 +29,8 @@ export const Toolbar = ({
     setIgnoreBlankLines,
     ignoreComments,
     setIgnoreComments,
+    semanticDiff,
+    setSemanticDiff,
     onSort,
     onPrettify,
     isEditing,
@@ -97,6 +101,21 @@ export const Toolbar = ({
                         onChange={(e) => setIgnoreComments(e.target.checked)}
                     />
                     No Comments
+                </label>
+
+                <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
+
+                <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none px-2 hover:text-indigo-300 transition-colors" title="Sort JSON keys before comparing (Semantic Diff)">
+                    <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${semanticDiff ? 'bg-amber-600 border-amber-600' : 'border-slate-600 bg-slate-800'}`}>
+                        {semanticDiff && <Check size={10} className="text-white" />}
+                    </div>
+                    <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={semanticDiff}
+                        onChange={(e) => setSemanticDiff(e.target.checked)}
+                    />
+                    Semantic
                 </label>
 
                 <div className="h-6 w-px bg-slate-800 hidden md:block"></div>

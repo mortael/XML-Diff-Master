@@ -14,60 +14,106 @@ interface TreeNode {
     id: string; // unique id for key
 }
 
-const parseXMLToTree = (xml: string): TreeNode | null => {
-    try {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(xml, 'application/xml');
-        if (doc.querySelector('parsererror')) return null;
+const parseDataToTree = (data: string): TreeNode | null => {
+    if (!data.trim()) return null;
 
-        let seed = 0;
-        const uid = () => `node-${seed++}`;
+    // Try XML first if it starts with <
+    if (data.trim().startsWith('<')) {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(data, 'application/xml');
+            if (doc.querySelector('parsererror')) throw new Error();
 
-        const processNode = (node: Node): TreeNode | null => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                const el = node as Element;
-                const attributes = Array.from(el.attributes).map(a => ({
-                    name: a.name,
-                    value: a.value
-                }));
+            let seed = 0;
+            const uid = () => `node-${seed++}`;
 
-                // Check if purely text content
-                const hasTextOnly = el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE;
+            const processNode = (node: Node): TreeNode | null => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    const el = node as Element;
+                    const attributes = Array.from(el.attributes).map(a => ({
+                        name: a.name,
+                        value: a.value
+                    }));
 
-                if (hasTextOnly) {
+                    const hasTextOnly = el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE;
+
+                    if (hasTextOnly) {
+                        return {
+                            type: 'element',
+                            name: el.tagName,
+                            attributes,
+                            text: el.textContent || '',
+                            id: uid()
+                        };
+                    }
+
+                    const children = Array.from(el.childNodes)
+                        .map(processNode)
+                        .filter((n): n is TreeNode => n !== null);
+
                     return {
                         type: 'element',
                         name: el.tagName,
                         attributes,
-                        text: el.textContent || '',
+                        children,
                         id: uid()
                     };
+                } else if (node.nodeType === Node.TEXT_NODE) {
+                    const text = node.textContent?.trim();
+                    if (!text) return null;
+                    return { type: 'text', name: '#text', text, id: uid() };
+                } else if (node.nodeType === Node.COMMENT_NODE) {
+                    return { type: 'comment', name: '#comment', text: node.textContent || '', id: uid() };
+                } else if (node.nodeType === Node.CDATA_SECTION_NODE) {
+                    return { type: 'cdata', name: '#cdata', text: node.textContent || '', id: uid() };
                 }
+                return null;
+            };
 
-                const children = Array.from(el.childNodes)
-                    .map(processNode)
-                    .filter((n): n is TreeNode => n !== null);
+            return processNode(doc.documentElement);
+        } catch {
+            return null;
+        }
+    }
 
+    // Try JSON
+    try {
+        const json = JSON.parse(data);
+        let seed = 0;
+        const uid = () => `jnode-${seed++}`;
+
+        const processJson = (name: string, value: any): TreeNode => {
+            if (value === null) {
+                return { type: 'element', name, text: 'null', id: uid(), attributes: [{ name: 'type', value: 'null' }] };
+            }
+            if (Array.isArray(value)) {
                 return {
                     type: 'element',
-                    name: el.tagName,
-                    attributes,
-                    children,
-                    id: uid()
+                    name: name || '[]',
+                    id: uid(),
+                    attributes: [{ name: 'type', value: 'array' }, { name: 'length', value: value.length.toString() }],
+                    children: value.map((item, idx) => processJson(idx.toString(), item))
                 };
-            } else if (node.nodeType === Node.TEXT_NODE) {
-                const text = node.textContent?.trim();
-                if (!text) return null;
-                return { type: 'text', name: '#text', text, id: uid() };
-            } else if (node.nodeType === Node.COMMENT_NODE) {
-                return { type: 'comment', name: '#comment', text: node.textContent || '', id: uid() };
-            } else if (node.nodeType === Node.CDATA_SECTION_NODE) {
-                return { type: 'cdata', name: '#cdata', text: node.textContent || '', id: uid() };
             }
-            return null;
+            if (typeof value === 'object') {
+                return {
+                    type: 'element',
+                    name: name || '{}',
+                    id: uid(),
+                    attributes: [{ name: 'type', value: 'object' }],
+                    children: Object.entries(value).map(([k, v]) => processJson(k, v))
+                };
+            }
+            return {
+                type: 'element',
+                name,
+                text: String(value),
+                id: uid(),
+                attributes: [{ name: 'type', value: typeof value }]
+            };
         };
 
-        return processNode(doc.documentElement);
+        return processJson('root', json);
     } catch {
         return null;
     }
@@ -76,10 +122,20 @@ const parseXMLToTree = (xml: string): TreeNode | null => {
 const TreeItem = ({ node, depth = 0 }: { node: TreeNode; depth?: number }) => {
     const [isOpen, setIsOpen] = useState(true);
 
-    if (node.type === 'text') {
+    if (node.type === 'text' || (node.attributes?.some(a => a.name === 'type' && a.value !== 'object' && a.value !== 'array') && node.text)) {
+        // Leaf node (text or primitive JSON value)
+        const isJsonPrimitive = node.attributes?.some(a => a.name === 'type');
         return (
             <div className="flex items-start text-xs font-mono py-0.5 hover:bg-slate-800/50 rounded" style={{ paddingLeft: `${depth * 1.5}rem` }}>
-                <span className="text-slate-400 select-all break-all text-left">"{node.text}"</span>
+                {isJsonPrimitive ? (
+                    <span className="break-all text-left">
+                        <span className="text-pink-400 font-semibold">{node.name}</span>
+                        <span className="text-slate-500 mx-1">:</span>
+                        <span className="text-amber-300">{node.text}</span>
+                    </span>
+                ) : (
+                    <span className="text-slate-400 select-all break-all text-left">"{node.text}"</span>
+                )}
             </div>
         );
     }
@@ -115,16 +171,16 @@ const TreeItem = ({ node, depth = 0 }: { node: TreeNode; depth?: number }) => {
                     ) : <Circle size={4} className="opacity-30" />}
                 </div>
 
-                {/* Tag Name */}
                 <span className="text-pink-400 font-semibold">{node.name}</span>
 
-                {/* Attributes */}
                 {node.attributes && node.attributes.map(attr => (
-                    <span key={attr.name} className="ml-1 hidden sm:inline">
-                        <span className="text-cyan-300">{attr.name}</span>
-                        <span className="text-slate-500">=</span>
-                        <span className="text-lime-400">"{attr.value}"</span>
-                    </span>
+                    attr.name !== 'type' && (
+                        <span key={attr.name} className="ml-1 hidden sm:inline">
+                            <span className="text-cyan-300">{attr.name}</span>
+                            <span className="text-slate-500">=</span>
+                            <span className="text-lime-400">"{attr.value}"</span>
+                        </span>
+                    )
                 ))}
 
                 {/* Folded Preview */}
@@ -152,10 +208,10 @@ const TreeItem = ({ node, depth = 0 }: { node: TreeNode; depth?: number }) => {
 };
 
 export const TreeView = ({ xml }: TreeViewProps) => {
-    const tree = useMemo(() => parseXMLToTree(xml), [xml]);
+    const tree = useMemo(() => parseDataToTree(xml), [xml]);
 
     if (!xml) return <div className="text-slate-500 italic p-4 text-center">No content</div>;
-    if (!tree) return <div className="text-red-400 italic p-4 text-center">Invalid XML structure</div>;
+    if (!tree) return <div className="text-red-400 italic p-4 text-center">Invalid XML or JSON structure</div>;
 
     return (
         <div className="p-2 overflow-auto h-full pb-20">

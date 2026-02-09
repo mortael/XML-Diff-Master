@@ -1,30 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JSON Diff Master - Offline</title>
 
-    <!-- 
+    <!--
       OFFLINE USAGE INSTRUCTIONS:
-      To run this completely offline (without internet), download the following files 
+      To run this completely offline (without internet), download the following files
       and place them in a folder named 'lib' next to this html file.
-      
+
       1. https://unpkg.com/react@18.2.0/umd/react.production.min.js -> lib/react.js
       2. https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js -> lib/react-dom.js
       3. https://unpkg.com/@babel/standalone@7.23.5/babel.min.js -> lib/babel.js
       4. https://cdn.tailwindcss.com -> lib/tailwindcss.js
       5. https://unpkg.com/diff@5.1.0/dist/diff.min.js -> lib/diff.js
-      
+
       Then switch the comments below to enable "Offline Mode".
       Note: JSON parsing, icons, clsx, and tailwind-merge now use native browser APIs - fewer external libraries needed!
     -->
 
     <!-- === CDN MODE (Default) === -->
-    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+    <script
+      src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"
+    ></script>
+    <script
+      src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"
+    ></script>
+    <script
+      src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"
+    ></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/diff@5.1.0/dist/diff.min.js"></script>
 
@@ -37,51 +42,11 @@
     <script src="lib/diff.js"></script>
     -->
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        slate: {
-                            750: '#2d3748',
-                            850: '#1a202c',
-                            950: '#0f172a',
-                        },
-                        diff: {
-                            add: 'rgba(16, 185, 129, 0.15)',
-                            addText: '#6ee7b7',
-                            addHighlight: 'rgba(16, 185, 129, 0.4)',
-                            del: 'rgba(239, 68, 68, 0.15)',
-                            delText: '#fca5a5',
-                            delHighlight: 'rgba(239, 68, 68, 0.4)',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        ::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
-        }
+    <script></script>
+    <style></style>
+  </head>
 
-        ::-webkit-scrollbar-track {
-            background: #1e293b;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #475569;
-            border-radius: 5px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #64748b;
-        }
-    </style>
-</head>
-
-<body class="bg-slate-950 text-slate-200 antialiased overflow-hidden">
+  <body class="bg-slate-950 text-slate-200 antialiased overflow-hidden">
     <div id="root"></div>
 
     <script type="text/babel" data-presets="react,typescript">
@@ -1458,6 +1423,5 @@
         root.render(<App />);
 
     </script>
-</body>
-
+  </body>
 </html>
