@@ -12,7 +12,7 @@ interface SettingsModalProps {
 export const SettingsModal = ({ isOpen, onClose, settings, setSettings, defaultSettings }: SettingsModalProps) => {
     if (!isOpen) return null;
 
-    const updateColor = (key: string, value: string) => {
+    const updateColor = (key: keyof SettingsType['colors'], value: string) => {
         setSettings(s => ({ ...s, colors: { ...s.colors, [key]: value } }));
     };
 
@@ -26,7 +26,7 @@ export const SettingsModal = ({ isOpen, onClose, settings, setSettings, defaultS
 
     const resetToDefaults = () => setSettings(defaultSettings);
 
-    const ColorInput = ({ label, colorKey }: { label: string, colorKey: string }) => (
+    const ColorInput = ({ label, colorKey }: { label: string, colorKey: keyof SettingsType['colors'] }) => (
         <div className="flex items-center justify-between py-2">
             <span className="text-slate-300 text-sm">{label}</span>
             <div className="flex items-center gap-2">

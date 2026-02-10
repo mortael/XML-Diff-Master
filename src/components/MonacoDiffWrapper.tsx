@@ -1,7 +1,7 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { DiffEditor, DiffOnMount } from '@monaco-editor/react';
 import { Settings } from '../utils/xml';
-import { initMonaco } from '../utils/monaco-init';
+import { initMonaco, defineCustomTheme } from '../utils/monaco-init';
 
 initMonaco();
 
@@ -23,10 +23,20 @@ export const MonacoDiffWrapper = ({
     ignoreWhitespace
 }: MonacoDiffWrapperProps) => {
     const diffEditorRef = useRef<any>(null);
+    const monacoRef = useRef<any>(null);
 
-    const handleEditorDidMount: DiffOnMount = (editor: any) => {
+    const handleEditorDidMount: DiffOnMount = (editor: any, monaco: any) => {
         diffEditorRef.current = editor;
+        monacoRef.current = monaco;
+        defineCustomTheme(settings);
     };
+
+    // Re-apply custom theme when settings colors change
+    useEffect(() => {
+        if (monacoRef.current) {
+            defineCustomTheme(settings);
+        }
+    }, [settings.colors]);
 
     return (
         <div className="flex flex-col h-full bg-slate-950">
@@ -36,7 +46,7 @@ export const MonacoDiffWrapper = ({
                     original={original}
                     modified={modified}
                     language={language === 'text' ? 'plaintext' : language}
-                    theme="vs-dark"
+                    theme="xmldiff-dark"
                     onMount={handleEditorDidMount}
                     options={{
                         minimap: { enabled: true },

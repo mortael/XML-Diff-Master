@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 
 import { Settings } from '../utils/xml';
-import { initMonaco } from '../utils/monaco-init';
+import { initMonaco, defineCustomTheme } from '../utils/monaco-init';
 import { Upload, Download, Copy, Check, X, WrapText } from 'lucide-react';
 
 // Ensure Monaco is initialized with correct worker paths
@@ -48,7 +48,16 @@ export const MonacoEditorWrapper = ({
     const handleEditorDidMount: OnMount = (editor: any, monaco: any) => {
         editorRef.current = editor;
         monacoRef.current = monaco;
+        // Apply custom theme on mount
+        defineCustomTheme(settings);
     };
+
+    // Re-apply custom theme when settings colors change
+    useEffect(() => {
+        if (monacoRef.current) {
+            defineCustomTheme(settings);
+        }
+    }, [settings.colors]);
 
     // Sync error markers
     useEffect(() => {
@@ -131,7 +140,7 @@ export const MonacoEditorWrapper = ({
             <div className="flex items-center justify-between px-3 py-2 border-b bg-slate-800 border-slate-700">
                 <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-300 text-sm uppercase tracking-wide">{label}</span>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${language === 'json' ? 'bg-yellow-900/40 text-yellow-500' : 'bg-blue-900/40 text-blue-400'}`}>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${language === 'json' ? 'bg-yellow-900/40 text-yellow-500' : language === 'text' ? 'bg-green-900/40 text-green-400' : 'bg-blue-900/40 text-blue-400'}`}>
                         {language.toUpperCase()}
                     </span>
                 </div>
@@ -206,7 +215,7 @@ export const MonacoEditorWrapper = ({
                     defaultLanguage={language === 'text' ? 'plaintext' : language}
                     language={language === 'text' ? 'plaintext' : language}
                     value={value}
-                    theme="vs-dark"
+                    theme="xmldiff-dark"
                     onChange={(val: string | undefined) => onChange(val || '')}
                     onMount={handleEditorDidMount}
                     options={{

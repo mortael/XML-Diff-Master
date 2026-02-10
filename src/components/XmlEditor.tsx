@@ -111,7 +111,7 @@ export const XmlEditor = ({
           onChange(formatted);
         }
 
-        if (onFileNameChange) onFileNameChange("untitled.xml");
+        if (onFileNameChange) onFileNameChange(`untitled.${mode === 'json' ? 'json' : mode === 'text' ? 'txt' : 'xml'}`);
       }
     }
   };
@@ -296,7 +296,7 @@ export const XmlEditor = ({
             {label}
           </span>
           <span
-            className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${mode === "json" ? "bg-yellow-900/40 text-yellow-500" : "bg-blue-900/40 text-blue-400"}`}
+            className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${mode === "json" ? "bg-yellow-900/40 text-yellow-500" : mode === "text" ? "bg-green-900/40 text-green-400" : "bg-blue-900/40 text-blue-400"}`}
           >
             {mode.toUpperCase()}
           </span>
@@ -308,7 +308,7 @@ export const XmlEditor = ({
             >
               <AlertTriangle size={14} />
               <span className="max-w-[150px] truncate font-medium underline">
-                Line {error.line}: Invalid XML
+                Line {error.line}: Invalid {mode.toUpperCase()}
               </span>
             </button>
           )}
@@ -497,8 +497,8 @@ export const XmlEditor = ({
                     (mode === "json"
                       ? highlightJSON(value, settings?.colors)
                       : mode === "xml"
-                      ? highlightXML(value, settings?.colors)
-                      : highlightText(value, settings?.colors)) + "\n",
+                        ? highlightXML(value, settings?.colors)
+                        : highlightText(value, settings?.colors)) + "\n",
                 }}
                 ref={preRef}
                 style={{ color: "#e2e8f0", lineHeight: "1.5" }}
